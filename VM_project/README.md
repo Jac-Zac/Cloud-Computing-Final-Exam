@@ -1,27 +1,34 @@
-# Cloud exam Virtual Machine (part 1)
+# Cloud Exam Virtual Machine Setup Guide
 
-## Create a Template 
-> [!TODO]
-> Explain how to do this from the terminal
+This guide walks through setting up a VM cluster for cloud environment testing, with one master node and multiple worker nodes.
 
-- Install [arm version of ubuntu server](https://ubuntu.com/download/server/arm)
-- Unattended Install:
+## Table of Contents
+- [Initial Template Setup](#initial-template-setup)
+- [Cloning VMs](#cloning-vms)
+- [Network Configuration](#network-configuration)
+- [Master Node Configuration](#master-node-configuration)
+- [Node Access and Management](#node-access-and-management)
 
-  - username: `user01`
-  - password: `test`
+## Initial Template Setup
 
-### Configure the VBOx internal network.
+### Create Base Template VM
+1. Download and install [ARM version of Ubuntu Server](https://ubuntu.com/download/server/arm)
+2. Use unattended installation with these credentials:
+   - Username: `user01`
+   - Password: `test`
 
-Created an Host Only network, named CloudBasicNet
+### Configure VirtualBox Internal Network
 
+Create a Host-Only network named "CloudBasicNet" with:
 ```
 Mask: 255.255.255.0
 Lower Bound: 192.168.56.2
 Upper Bound: 192.168.56.199
 ```
 
+## Cloning VMs
 
-#### Clone to create your other nodes:
+Clone the template VM to create your cluster:
 
 ```bash
 VBoxManage clonevm "template" --name "master" --register --mode all
@@ -29,158 +36,147 @@ VBoxManage clonevm "template" --name "node-01" --register --mode all
 VBoxManage clonevm "template" --name "node-02" --register --mode all
 ```
 
----
+> **TIP**: List all your virtual machines with: `VBoxManage list vms`
 
-### Configure the nodes
-Add a new network adapter on each machine: `internal network` naming it: "CloudBasicNet".
+## Network Configuration
 
-### Enable port forwarding
-> To connect to the virtual machines we can enable port forwarding
+### Configure Network Adapters
 
-### Configuring Network Virtual Box
-
-##### Using a rule like this:
-
-- Name -> ssh
-- Protocol -> TCP
-- HostIP -> 127.0.0.1
-- Host Port -> some_port_number
-- Guest Port -> 22
-
-An example of how to do it from the terminal could be this:
-
-_This example configures it both for the master and for the node-01._
-
-> [!TIP]
-> Your virtual machines names can be seen with: ```VBoxManage list vms```
+For each VM (master and all nodes), configure a second network adapter:
 
 ```bash
+# Enable Adapter 2 and set to "Internal Network"
+VBoxManage modifyvm "VM_NAME" --nic2 intnet
+
+# Assign to "CloudBasicNet" network
+VBoxManage modifyvm "VM_NAME" --intnet2 "CloudBasicNet"
+```
+
+Replace `VM_NAME` with "master", "node-01", etc. for each machine.
+
+### Enable SSH Port Forwarding
+
+Configure port forwarding to access VMs via SSH:
+
+```bash
+# For master node (accessible on localhost:3022)
 VBoxManage modifyvm "master" --natpf1 "ssh,tcp,127.0.0.1,3022,,22"
+
+# For worker node 1 (accessible on localhost:4022)
 VBoxManage modifyvm "node-01" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
+
+# Add similar rules for other nodes as needed
 ```
 
-#### Configuring Network Adapter
-
-1. Enables Adapter 2 and sets its mode to "Internal Network".a
-
-  ```bash
-  VBoxManage modifyvm "master" --nic2 intnet
-  ````
-
-2. Assigns the network name _"CloudBasicNet"_ to Adapter 2.
-
-  ```bash
-  VBoxManage modifyvm "master" --intnet2 "CloudBasicNet"
-  ```
-
-Add a new network adapter on each machine: enable "Adapter 2
-
-**Similarly do this for each node-n**
-
-## Master node configuration
+## Master Node Configuration
 
 > [!TIP]
-> You can start the VM in headless mode from the terminal:
-> ```bash
->  VBoxManage startvm "VM_name" --type headless
-> You can also stop a machine and save the state of it with this command
->  ```
-> ```bash
->  VBoxManage controlvm "VM_name" savestate
->  ```
+>```bash
+># Start VM in headless mode
+>VBoxManage startvm "VM_NAME" --type headless
+># Save VM state and stop
+>VBoxManage controlvm "VM_NAME" savestate
+>```
 
-### Initial setup
+### SSH Key Setup
 
-After you have created the node and a key you can copy the key to the master node. You can start the machine and copy things into it
+1. Copy your SSH public key to the master node:
+   ```bash
+   scp -P 3022 ~/.ssh/id_ed25519.pub user01@127.0.0.1:~
+   ```
 
-```bash
- scp -P 3022  ~/.ssh/id_ed25519.pub user01@127.0.0.1:~ 
-```
+2. SSH into the master node:
+   ```bash
+   ssh -p 3022 user01@127.0.0.1
+   ```
 
-You can ssh into the machine for some additional configuration
+3. Configure SSH authentication:
+   ```bash
+   mkdir -p ~/.ssh
+   chmod 700 ~/.ssh
+   cat ~/id_ed25519.pub >> ~/.ssh/authorized_keys
+   chmod 644 ~/.ssh/authorized_keys
+   rm ~/id_ed25519.pub
+   ```
 
-```bash
-ssh -p 3022 user01@127.0.0.1
-```
+### Copy Configuration Files
 
-And set up your ssh key to work correctly:
-
-```bash
-mkdir ~/.ssh
-chmod 700 ~/.ssh
-cat ~/id_ed25519.pub >> ~/.ssh/authorized_keys
-chmod 644 ~/.ssh/authorized_keys
-rm ~/id_ed25519.pub # Delete usless key in the home directory
-```
-
-Moreover you can copy some other configuration files with the following command:
-
+Transfer configuration files to the master node:
 ```bash
 scp -P 3022 -r master_config user01@127.0.0.1:~
 ```
 
-### Configure the network
+### Network Configuration
 
+1. Apply the network configuration:
+   ```bash
+   sudo cp ~/master_config/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml
+   sudo netplan apply
+   ```
 
-ssh into the machine and start working from it
+2. Set the hostname:
+   ```bash
+   echo "master" | sudo tee /etc/hostname > /dev/null
+   ```
 
+3. Update hosts file:
+   ```bash
+   sudo cp ~/master_config/hosts /etc/hosts
+   ```
+
+### DNS and DHCP Configuration
+
+1. Install DNSmasq:
+   ```bash
+   sudo apt install dnsmasq -y
+   ```
+
+2. Configure DNSmasq:
+   ```bash
+   sudo cp ~/master_config/dnsmasq.conf /etc/dnsmasq.conf
+   ```
+
+3. Configure DNS resolution:
+   ```bash
+   sudo unlink /etc/resolv.conf
+   sudo cp ~/master_config/resolv.conf /etc/resolv.conf
+   sudo ln -s /run/systemd/resolve/resolv.conf /etc/resolv.dnsmasq
+   sudo systemctl restart dnsmasq systemd-resolved
+   ```
+
+4. Enable DNSmasq on startup:
+   ```bash
+   sudo systemctl enable dnsmasq
+   ```
+
+5. Apply changes:
+   ```bash
+   sudo reboot
+   ```
+
+## Node Access and Management
+
+After reboot, access the master node:
 ```bash
 ssh -p 3022 user01@127.0.0.1
 ```
 
-Create and apply the custom configuration for the master node:
+From here, you can manage your cluster and configure worker nodes as needed.
 
-```bash
-sudo cp ~/master_config/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml
-sudo netplan apply
-```
+---
 
-Change the hostname to master:
+## Terminal Commands Reference
 
-```bash
-# Write to etc/hostname and pass the output to /dev/null to avoid printing to the shell
-echo "master" | sudo tee /etc/hostname > /dev/null
-```
+### VM Management
+- Create VM clones: `VBoxManage clonevm [SOURCE] --name [NAME] --register --mode all`
+- List VMs: `VBoxManage list vms`
+- Start VM: `VBoxManage startvm [NAME] --type headless`
+- Save VM state: `VBoxManage controlvm [NAME] savestate`
 
-Change the host file:
+### Network Configuration
+- Port forwarding: `VBoxManage modifyvm [NAME] --natpf1 "ssh,tcp,127.0.0.1,[PORT],,22"`
+- Set internal network: `VBoxManage modifyvm [NAME] --nic2 intnet --intnet2 "CloudBasicNet"`
 
-```bash
-sudo cp ~/master_config/hosts /etc/host
-```
-
-Install a dnsmasq server to dynamically assign the IP and hostname to the other nodes on the internal interface and create a cluster.
-
-```bash
-sudo apt install dnsmasq -y
-```
-
-Configure Dnsmasq with the provided configuration. 
-
-```bash
-sudo cp ~/master_config/dnsmasq.conf /etc/dnsmasq.conf
-```
-
-Configure the resolve:
-
-```bash
-sudo unlink /etc/resolv.conf
-sudo cp ~/master_config/resolv.conf /etc/resolv.conf
-sudo ln -s  /run/systemd/resolve/resolv.conf /etc/resolv.dnsmasq
-sudo systemctl restart dnsmasq systemd-resolved
-```
-
-```bash
-sudo systemctl enable dnsmasq
-```
-
-**Reboot the machine**
-
-```bash
-sudo reboot
-```
-
-SSH into it again:
-
-
-
-![usful idea](../assets/notes.png)
+### SSH Access
+- Connect: `ssh -p [PORT] user01@127.0.0.1`
+- Copy files: `scp -P [PORT] [SOURCE] user01@127.0.0.1:[DESTINATION]`
