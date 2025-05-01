@@ -1,4 +1,4 @@
-# Cloud Exam
+# Cloud exam Virtual Machine (part 1)
 
 ## Create a Template 
 
@@ -78,4 +78,4 @@ ssh -p 3022 user01@127.0.0.1
 
 - Try to remove the additional configuration you did to your `dnsmasq.conf`
 
-![usful idea](./assets/notes.png)
+![usful idea](../assets/notes.png)
