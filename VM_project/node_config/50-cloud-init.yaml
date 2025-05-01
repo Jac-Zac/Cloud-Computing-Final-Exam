@@ -1,0 +1,13 @@
+# This is the network config written by 'subiquity'
+network:
+  version: 2
+  ethernets:
+    enp0s8:
+      dhcp4: true
+      dhcp4-overrides:
+        use-dns: no
+    enp0s9:
+      dhcp4: true
+      dhcp-identifier: mac
+      nameservers:
+        addresses: [192.168.56.1]

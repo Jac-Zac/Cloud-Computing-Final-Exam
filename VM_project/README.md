@@ -9,6 +9,8 @@ This guide walks through setting up a VM cluster for cloud environment testing, 
 - [Master Node Configuration](#master-node-configuration)
 - [Node Access and Management](#node-access-and-management)
 
+---
+
 ## Initial Template Setup
 
 ### Create Base Template VM
@@ -68,6 +70,8 @@ VBoxManage modifyvm "node-01" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
 
 # Add similar rules for other nodes as needed
 ```
+
+---
 
 ## Master Node Configuration
 
@@ -235,6 +239,44 @@ scp -P 3022 -r master_config user01@127.0.0.1:~
    ```
 
 ---
+
+## Node configurations
+
+Bootstrap the VM node-01 and configure the secondary network adapter with a dynamic IP
+
+Copy the configurations:
+
+``` bash
+scp -P 3022 user01@127.0.0.1:~/node_config ./node_config 
+```
+
+To do this we will edit the netplan file:
+
+```bash
+sudo cp ~/node_conifg/50-cloud-init.yaml  /etc/netplan/50-cloud-init.yaml
+```
+
+apply the configuration
+
+```bash
+sudo netplan apply
+```
+
+Empty the /etc/hostname file
+
+```bash
+echo "" | sudo tee /etc/hostname > dev/null
+```
+
+Set the proper dns server (assigned with dhcp):
+
+```bash
+sudo unlink /etc/resolv.conf
+sudo cp ~/node_config/resolv.conf /etc/resolv.conf
+```
+
+nameserver 192.168.56.1
+search .
 
 
 
