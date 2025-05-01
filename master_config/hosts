@@ -1,0 +1,24 @@
+# Host configuration
+127.0.0.1 localhost
+127.0.1.1 master
+
+# Define the ip for the master node
+192.168.56.1 master
+
+# Add config for the other nodes
+192.168.56.2 node02
+192.168.56.3 node03
+192.168.56.4 node04
+192.168.56.5 node05
+192.168.56.6 node06
+192.168.56.7 node07
+192.168.56.8 node08
+192.168.56.9 node09
+192.168.56.10 node10
+
+# The following lines are desirable for IPv6 capable hosts
+::1     ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
