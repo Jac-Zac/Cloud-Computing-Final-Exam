@@ -36,7 +36,8 @@ VBoxManage clonevm "template" --name "node-01" --register --mode all
 VBoxManage clonevm "template" --name "node-02" --register --mode all
 ```
 
-> **TIP**: List all your virtual machines with: `VBoxManage list vms`
+> [!TIP]
+> List all your virtual machines with: `VBoxManage list vms`
 
 ## Network Configuration
 
@@ -71,12 +72,12 @@ VBoxManage modifyvm "node-01" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
 ## Master Node Configuration
 
 > [!TIP]
->```bash
-># Start VM in headless mode
->VBoxManage startvm "VM_NAME" --type headless
-># Save VM state and stop
->VBoxManage controlvm "VM_NAME" savestate
->```
+> ```bash
+> # Start VM in headless mode
+> VBoxManage startvm "VM_NAME" --type headless
+> # Save VM state and stop
+> VBoxManage controlvm "VM_NAME" savestate
+> ```
 
 ### SSH Key Setup
 
@@ -89,6 +90,9 @@ VBoxManage modifyvm "node-01" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
    ```bash
    ssh -p 3022 user01@127.0.0.1
    ```
+
+   > [!TIP]
+   > To exit an SSH session, type `exit` or press `Ctrl+D`
 
 3. Configure SSH authentication:
    ```bash
@@ -106,8 +110,15 @@ Transfer configuration files to the master node:
 scp -P 3022 -r master_config user01@127.0.0.1:~
 ```
 
-### Network Configuration
+> [!TIP]
+> To copy files from the VM to your host machine, reverse the source and destination:
+> ```bash
+> scp -P 3022 user01@127.0.0.1:~/config_file ./local_directory/
+> ```
 
+## Network Configuration
+
+### Base Network Setup
 1. Apply the network configuration:
    ```bash
    sudo cp ~/master_config/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml
@@ -117,7 +128,11 @@ scp -P 3022 -r master_config user01@127.0.0.1:~
 2. Set the hostname:
    ```bash
    echo "master" | sudo tee /etc/hostname > /dev/null
+   sudo hostnamectl set-hostname master  # Ensure hostname is set immediately
    ```
+
+   > [!TIP]
+   > Verify hostname changes with: `hostname`
 
 3. Update hosts file:
    ```bash
@@ -128,21 +143,38 @@ scp -P 3022 -r master_config user01@127.0.0.1:~
 
 1. Install DNSmasq:
    ```bash
+   sudo apt update
    sudo apt install dnsmasq -y
    ```
+
+   > [!TIP]
+   > Check installation status with: `systemctl status dnsmasq`
 
 2. Configure DNSmasq:
    ```bash
    sudo cp ~/master_config/dnsmasq.conf /etc/dnsmasq.conf
+   sudo mkdir -p /etc/dnsmasq.d  # Create directory for additional configurations
    ```
 
 3. Configure DNS resolution:
    ```bash
+   # Backup original resolv.conf
+   sudo cp /etc/resolv.conf /etc/resolv.conf.backup
+   
+   # Remove existing symlink if present
    sudo unlink /etc/resolv.conf
+   
+   # Set up new configuration
    sudo cp ~/master_config/resolv.conf /etc/resolv.conf
    sudo ln -s /run/systemd/resolve/resolv.conf /etc/resolv.dnsmasq
-   sudo systemctl restart dnsmasq systemd-resolved
+   
+   # Restart relevant services
+   sudo systemctl restart dnsmasq
+   sudo systemctl restart systemd-resolved
    ```
+
+   > [!TIP]
+   > Test DNS resolution with: `nslookup google.com` or `ping -c 3 master`
 
 4. Enable DNSmasq on startup:
    ```bash
@@ -152,7 +184,70 @@ scp -P 3022 -r master_config user01@127.0.0.1:~
 5. Apply changes:
    ```bash
    sudo reboot
+   # Wait for system to reboot before proceeding to next steps
    ```
+
+   > [!TIP]
+   > After reboot, reconnect with: `ssh -p 3022 user01@127.0.0.1`
+
+## Configure Distributed Filesystem
+
+### NFS Server Setup
+
+1. Install NFS server:
+   ```bash
+   sudo apt update
+   sudo apt install nfs-kernel-server -y
+   ```
+
+2. Create shared directory:
+   ```bash
+   sudo mkdir -p /shared
+   sudo chmod 777 /shared  # Set appropriate permissions
+   ```
+
+   > [!TIP]
+   > For production environments, use more restrictive permissions: `sudo chmod 755 /shared`
+
+3. Configure NFS exports:
+   ```bash
+   # Add export configuration without overriding existing comments
+   echo '/shared/  192.168.56.0/255.255.255.0(rw,sync,no_root_squash,no_subtree_check)' | sudo tee -a /etc/exports > /dev/null
+   ```
+
+   > [!TIP]
+   > View current exports with: `cat /etc/exports`
+
+4. Enable and restart the NFS server:
+   ```bash
+   sudo systemctl enable nfs-kernel-server
+   sudo systemctl restart nfs-kernel-server
+   ```
+
+   > [!TIP]
+   > Check NFS server status: `sudo systemctl status nfs-kernel-server`
+   > Verify exports: `showmount -e localhost`
+
+5. Create shared directories:
+   ```bash
+   sudo mkdir -p /shared/data /shared/home
+   sudo chmod 777 /shared/data /shared/home
+   ```
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Node Access and Management
 
@@ -163,20 +258,36 @@ ssh -p 3022 user01@127.0.0.1
 
 From here, you can manage your cluster and configure worker nodes as needed.
 
+> [!TIP]
+> To access worker nodes from the master node, use: `ssh user01@node-01` or `ssh user01@node-02`
+
 ---
 
-## Terminal Commands Reference
+## Client-Side NFS Setup
 
-### VM Management
-- Create VM clones: `VBoxManage clonevm [SOURCE] --name [NAME] --register --mode all`
-- List VMs: `VBoxManage list vms`
-- Start VM: `VBoxManage startvm [NAME] --type headless`
-- Save VM state: `VBoxManage controlvm [NAME] savestate`
+To mount the shared filesystem on client nodes:
 
-### Network Configuration
-- Port forwarding: `VBoxManage modifyvm [NAME] --natpf1 "ssh,tcp,127.0.0.1,[PORT],,22"`
-- Set internal network: `VBoxManage modifyvm [NAME] --nic2 intnet --intnet2 "CloudBasicNet"`
+```bash
+# Install NFS client
+sudo apt install nfs-common -y
 
-### SSH Access
-- Connect: `ssh -p [PORT] user01@127.0.0.1`
-- Copy files: `scp -P [PORT] [SOURCE] user01@127.0.0.1:[DESTINATION]`
+# Create mount points
+sudo mkdir -p /shared/data /shared/home
+```
+
+> [!TIP]
+> Check available NFS exports with: `showmount -e master`
+
+```bash
+# Mount NFS shares
+sudo mount master:/shared/data /shared/data
+sudo mount master:/shared/home /shared/home
+
+# Add to fstab for persistence
+echo 'master:/shared/data /shared/data nfs defaults 0 0' | sudo tee -a /etc/fstab
+echo 'master:/shared/home /shared/home nfs defaults 0 0' | sudo tee -a /etc/fstab
+```
+
+> [!TIP]
+
+> Verify mounts with: `df -h | grep shared` or `mount | grep nfs`
