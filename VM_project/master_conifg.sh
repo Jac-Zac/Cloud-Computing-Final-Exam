@@ -143,5 +143,5 @@ ssh -T -o StrictHostKeyChecking=no -p "$SSH_PORT" \
     "$USERNAME@$HOST_IP" "
   echo '$PASSWORD' | sudo -S reboot
 "
-echo "Done. Connect with: ssh -i ~/.ssh/id_ed25519 -p $SSH_PORT $USERNAME@$HOST_IP"
-
+echo -e "After bootstrap may happen the dnsmasq service start before the interfaces, just restart the service (this is a known preoblem for ubuntu):\n\n\033[1msudo systemctl restart dnsmasq systemd-resolved\033[0m"
+echo -e "Done. Connect with: \033[1;33mssh -i ~/.ssh/id_ed25519 -p $SSH_PORT $USERNAME@$HOST_IP\033[0m"
