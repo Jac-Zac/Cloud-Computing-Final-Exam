@@ -11,7 +11,7 @@ This guide walks through setting up a VM cluster for cloud environment testing, 
 
 ---
 
-## Initial Template Setup
+# Initial Template Setup
 
 ### Create Base Template VM
 1. Download and install [ARM version of Ubuntu Server](https://ubuntu.com/download/server/arm)
@@ -73,7 +73,7 @@ VBoxManage modifyvm "node-01" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
 
 ---
 
-## Master Node Configuration
+# Master Node Configuration
 
 > [!TIP]
 > ```bash
@@ -118,7 +118,12 @@ scp -P 3022 -r master_config user01@127.0.0.1:~
 > To copy files from the VM to your host machine, reverse the source and destination:
 > ```bash
 > scp -P 3022 user01@127.0.0.1:~/config_file ./local_directory/
-> ```
+
+Create a key also on the master node:
+
+```bash
+ssh-keygen
+```
 
 ## Network Configuration
 
@@ -194,8 +199,6 @@ scp -P 3022 -r master_config user01@127.0.0.1:~
    > [!TIP]
    > After reboot, reconnect with: `ssh -p 3022 user01@127.0.0.1`
 
-## Configure Distributed Filesystem
-
 ### NFS Server Setup
 
 1. Install NFS server:
@@ -216,7 +219,7 @@ scp -P 3022 -r master_config user01@127.0.0.1:~
 3. Configure NFS exports:
    ```bash
    # Add export configuration without overriding existing comments
-   echo '/shared/  192.168.56.0/255.255.255.0(rw,sync,no_root_squash,no_subtree_check)' | sudo tee -a /etc/exports > /dev/null
+   echo '/shared/ 192.168.56.0/255.255.255.0(rw,sync,no_root_squash,no_subtree_check)' | sudo tee -a /etc/exports > /dev/null
    ```
 
    > [!TIP]
@@ -240,7 +243,7 @@ scp -P 3022 -r master_config user01@127.0.0.1:~
 
 ---
 
-## Node configurations
+# Node configurations
 
 Bootstrap the VM node-01 and configure the secondary network adapter with a dynamic IP
 
@@ -253,7 +256,7 @@ scp -P 3022 user01@127.0.0.1:~/node_config ./node_config
 To do this we will edit the netplan file:
 
 ```bash
-sudo cp ~/node_conifg/50-cloud-init.yaml  /etc/netplan/50-cloud-init.yaml
+sudo cp ~/node_config/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml
 ```
 
 apply the configuration
@@ -265,7 +268,7 @@ sudo netplan apply
 Empty the /etc/hostname file
 
 ```bash
-echo "" | sudo tee /etc/hostname > dev/null
+echo "" | sudo tee /etc/hostname > /dev/null
 ```
 
 Set the proper dns server (assigned with dhcp):
@@ -275,25 +278,14 @@ sudo unlink /etc/resolv.conf
 sudo cp ~/node_config/resolv.conf /etc/resolv.conf
 ```
 
-nameserver 192.168.56.1
-search .
+```bash
+sudo reboot
+```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Node Access and Management
+### Node Access and Management
 
 After reboot, access the master node:
+
 ```bash
 ssh -p 3022 user01@127.0.0.1
 ```
@@ -303,9 +295,7 @@ From here, you can manage your cluster and configure worker nodes as needed.
 > [!TIP]
 > To access worker nodes from the master node, use: `ssh user01@node-01` or `ssh user01@node-02`
 
----
-
-## Client-Side NFS Setup
+### Client-Side NFS Setup
 
 To mount the shared filesystem on client nodes:
 
@@ -318,17 +308,32 @@ sudo mkdir -p /shared/data /shared/home
 ```
 
 > [!TIP]
-> Check available NFS exports with: `showmount -e master`
+> Check available NFS exports with: `showmount -e 192.168.56.1`
+
+### Set up automatically mounting
+
+Install necessary libraries
 
 ```bash
-# Mount NFS shares
-sudo mount master:/shared/data /shared/data
-sudo mount master:/shared/home /shared/home
-
-# Add to fstab for persistence
-echo 'master:/shared/data /shared/data nfs defaults 0 0' | sudo tee -a /etc/fstab
-echo 'master:/shared/home /shared/home nfs defaults 0 0' | sudo tee -a /etc/fstab
+sudo apt -y install autofs
 ```
+
+**Configure auto mount**
+
+```bash
+echo '/shared /etc/auto.shared' | sudo tee -a /etc/auto.master > /dev/null
+echo "# create new : [mount point] [option] [location]" | sudo tee /etc/auto.mount > /dev/null
+echo "data    192.168.56.1:/shared" | sudo tee -a /etc/auto.mount > /dev/null
+```
+
+Restart the service
+
+```bash
+sudo systemctl restart autofs
+```
+
+Add more configurations setups
+
 
 > [!TIP]
 
