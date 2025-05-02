@@ -117,25 +117,6 @@ if ! VBoxManage modifyvm "$NODE_NAME" --nic2 intnet --intnet2 "$NETWORK_NAME"; t
   exit 1
 fi
 
-# Configure adapter 3 (host-only) - only if node is not master
-if [[ "$NODE_NAME" != "master" ]]; then
-  log_info "Adding host-only adapter for $NODE_NAME..."
-  # Get the first host-only interface name
-  HOSTONLY_IF=$(VBoxManage list hostonlyifs | grep -m 1 "Name:" | awk '{print $2}')
-  
-  if [[ -z "$HOSTONLY_IF" ]]; then
-    log_info "No host-only interface found. Creating one..."
-    VBoxManage hostonlyif create
-    HOSTONLY_IF=$(VBoxManage list hostonlyifs | grep -m 1 "Name:" | awk '{print $2}')
-  fi
-  
-  if ! VBoxManage modifyvm "$NODE_NAME" --nic3 hostonly --hostonlyadapter3 "$HOSTONLY_IF"; then
-    log_warn "Failed to configure host-only adapter. Continuing without it."
-  else
-    log_success "Host-only adapter configured: $HOSTONLY_IF"
-  fi
-fi
-
 # Remove any old rule, then add SSH port-forward
 VBoxManage modifyvm "$NODE_NAME" --natpf1 delete ssh 2>/dev/null || true
 if ! VBoxManage modifyvm "$NODE_NAME" --natpf1 "ssh,tcp,$HOST_IP,$SSH_PORT,,22"; then
@@ -201,10 +182,9 @@ else
   sudo_exec "echo '' > /etc/hostname" "Clearing hostname for DHCP assignment"
 fi
 
-sudo_exec "cp /home/${USERNAME}/$CONFIG_DIR/hosts /etc/hosts" "Configuring hosts file"
-
 # Special configuration for master node
 if [[ "$NODE_NAME" == "master" ]]; then
+  sudo_exec "cp /home/${USERNAME}/$CONFIG_DIR/hosts /etc/hosts" "Configuring hosts file"
   log_info "Configuring master-specific services..."
   
   # DNSMASQ
@@ -256,16 +236,14 @@ else
   # Configure AutoFS for automatic mounting
   sudo_exec "echo '/shared /etc/auto.shared' | tee -a /etc/auto.master > /dev/null" "Setting up AutoFS master configuration"
   sudo_exec "echo '# create new : [mount point] [option] [location]' | tee /etc/auto.shared > /dev/null" "Creating AutoFS shared configuration"
-  sudo_exec "echo 'data    -fstype=nfs,rw,soft,intr    ${MASTER_IP}:/shared/data' | tee -a /etc/auto.shared > /dev/null" "Adding data share to AutoFS"
-  sudo_exec "echo 'home    -fstype=nfs,rw,soft,intr    ${MASTER_IP}:/shared/home' | tee -a /etc/auto.shared > /dev/null" "Adding home share to AutoFS"
   
   # Start and enable AutoFS
-  sudo_exec "systemctl restart autofs" "Restarting AutoFS service"
-  sudo_exec "systemctl enable autofs" "Enabling AutoFS on startup"
+  # sudo_exec "systemctl restart autofs" "Restarting AutoFS service"
+  # sudo_exec "systemctl enable autofs" "Enabling AutoFS on startup"
   
   # Alternative direct mount for testing
-  sudo_exec "mkdir -p /mnt/shared_test" "Creating test mount point"
-  sudo_exec "mount -t nfs ${MASTER_IP}:/shared/data /mnt/shared_test || true" "Testing direct NFS mount"
+  # sudo_exec "mkdir -p /mnt/shared_test" "Creating test mount point"
+  # sudo_exec "mount -t nfs ${MASTER_IP}:/shared/data /mnt/shared_test || true" "Testing direct NFS mount"
 fi
 
 # Verification & reboot
@@ -302,21 +280,14 @@ fi
 
 # Add node status monitoring script
 if [[ "$NODE_NAME" == "master" ]]; then
-  log_info "Creating node status monitoring script..."
-  cat > /tmp/check_nodes.sh <<EOF
-#!/bin/bash
-# Node status monitoring script
-echo "Checking node status:"
-for node in master node-01 node-02; do
-  echo -n "\$node: "
-  ping -c 1 -W 1 \$node >/dev/null && echo "UP" || echo "DOWN"
-done
-EOF
-  scp -q $SSH_OPTS -P "$SSH_PORT" /tmp/check_nodes.sh "${USERNAME}@${HOST_IP}:~/"
+  log_info "Deploying existing node status monitoring script..."
+
+  # Move script from copied master_config to shared location
   sudo_exec "mkdir -p /shared/scripts" "Creating shared scripts directory"
-  sudo_exec "cp /home/${USERNAME}/check_nodes.sh /shared/scripts/" "Copying monitoring script to shared location"
-  sudo_exec "chmod +x /shared/scripts/check_nodes.sh" "Making monitoring script executable"
-  log_success "Node monitoring script created at /shared/scripts/check_nodes.sh"
+  sudo_exec "cp /home/${USERNAME}/master_config/check_node.sh /shared/scripts/" "Copying monitoring script to shared location"
+  sudo_exec "chmod +x /shared/scripts/check_node.sh" "Making monitoring script executable"
+
+  log_success "Node monitoring script deployed to /shared/scripts/check_node.sh"
 fi
 
 echo -e "Connect via: ${YELLOW}${BOLD}ssh -i ~/.ssh/id_ed25519 -p $SSH_PORT $USERNAME@$HOST_IP${RESET}"
