@@ -95,13 +95,31 @@ else
   log_warn "VM '$VM_NAME' already exists. Skipping clone."
 fi
 
-# Network
+# Network config
 log_info "Configuring network..."
-VBoxManage modifyvm "$VM_NAME" --nic2 intnet --intnet2 "$NETWORK_NAME" \
-  && VBoxManage modifyvm "$VM_NAME" --natpf1 delete ssh 2>/dev/null \
-  && VBoxManage modifyvm "$VM_NAME" --natpf1 "ssh,tcp,$HOST_IP,$SSH_PORT,,22" \
-  && log_success "Network configured." \
-  || { log_error "Failed to configure network/port forwarding!"; exit 1; }
+if ! VBoxManage modifyvm "$VM_NAME" --nic2 intnet --intnet2 "$NETWORK_NAME"; then
+  log_error "Failed to configure network!"
+  exit 1
+fi
+
+# Remove any old rule, then add SSH port-forward
+VBoxManage modifyvm "$VM_NAME" --natpf1 delete ssh 2>/dev/null || true
+if ! VBoxManage modifyvm "$VM_NAME" --natpf1 "ssh,tcp,$HOST_IP,$SSH_PORT,,22"; then
+  log_error "Failed to configure port forwarding!"
+  exit 1
+fi
+
+log_success "Network configured."
+
+# Start VM
+if vm_running "$VM_NAME"; then
+  log_warn "VM is already running."
+else
+  log_info "Starting VM in headless mode..."
+  VBoxManage startvm "$VM_NAME" --type headless \
+    && log_success "VM started." \
+    || { log_error "Failed to start VM!"; exit 1; }
+fi
 
 # Start VM
 if vm_running "$VM_NAME"; then
@@ -146,6 +164,15 @@ sudo_exec "ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.dnsmasq" "Creatin
 sudo_exec "systemctl restart dnsmasq systemd-resolved" "Restarting DNS services"
 sudo_exec "systemctl enable dnsmasq" "Enabling dnsmasq on startup"
 
+# Make the script executable
+sudo_exec "chmod +x /home/${USERNAME}/master_config/fix_dnsmasq_startup.sh" "Making fix script executable"
+
+# Execute the fix script
+sudo_exec "/home/${USERNAME}/master_config/fix_dnsmasq_startup.sh" "Running dnsmasq startup fix"
+
+# Verify the fix was applied
+ssh_exec "systemctl status dnsmasq" "Verifying dnsmasq configuration" || log_warn "dnsmasq may still have issues!"
+
 # NFS server
 log_info "Setting up NFS server..."
 sudo_exec "apt install -y nfs-kernel-server" "Installing NFS server"
@@ -177,6 +204,6 @@ wait_for_ssh "$HOST_IP" "$SSH_PORT" || { log_error "Could not reconnect after re
 
 log_success "Master node setup complete!"
 log_info "Notes:"
-echo -e " - If DNS issues occur after reboot, run: sudo systemctl restart dnsmasq systemd-resolved"
+echo -e " - If DNS issues occur after reboot, run: sudo systemctl ${BOLD}restart dnsmasq systemd-resolved${RESET}"
 
 echo -e "Connect via: ${YELLOW}${BOLD}ssh -i ~/.ssh/id_ed25519 -p $SSH_PORT $USERNAME@$HOST_IP${RESET}"
