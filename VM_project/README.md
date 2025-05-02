@@ -7,6 +7,7 @@ This guide walks through setting up a VM cluster for cloud environment testing, 
 - [Cloning VMs](#cloning-vms)
 - [Network Configuration](#network-configuration)
 - [Master Node Configuration](#master-node-configuration)
+- [Worker Node Configuration](#worker-node-configuration)
 - [Node Access and Management](#node-access-and-management)
 
 ---
