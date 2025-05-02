@@ -243,98 +243,166 @@ ssh-keygen
 
 ---
 
-# Node configurations
-
-Bootstrap the VM node-01 and configure the secondary network adapter with a dynamic IP
-
-Copy the configurations:
-
-``` bash
-scp -P 3022 user01@127.0.0.1:~/node_config ./node_config 
-```
-
-To do this we will edit the netplan file:
-
-```bash
-sudo cp ~/node_config/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml
-```
-
-apply the configuration
-
-```bash
-sudo netplan apply
-```
-
-Empty the /etc/hostname file
-
-```bash
-echo "" | sudo tee /etc/hostname > /dev/null
-```
-
-Set the proper dns server (assigned with dhcp):
-
-```bash
-sudo unlink /etc/resolv.conf
-sudo cp ~/node_config/resolv.conf /etc/resolv.conf
-```
-
-```bash
-sudo reboot
-```
-
-### Node Access and Management
-
-After reboot, access the master node:
-
-```bash
-ssh -p 3022 user01@127.0.0.1
-```
-
-From here, you can manage your cluster and configure worker nodes as needed.
+# Worker Node Configuration
 
 > [!TIP]
-> To access worker nodes from the master node, use: `ssh user01@node-01` or `ssh user01@node-02`
+> ```bash
+> # Access worker nodes from master
+> ssh user01@node-01
+> ```
 
-### Client-Side NFS Setup
+## Initial Setup
 
-To mount the shared filesystem on client nodes:
+### Copy Configuration Files
+
+1. Copy node configuration from master to local machine:
+   ```bash
+   scp -P 3022 user01@127.0.0.1:~/node_config ./node_config 
+   ```
+
+2. SSH into the worker node:
+   ```bash
+   ssh user01@node-01
+   ```
+
+   > [!TIP]
+   > Use `hostname` to verify which node you're currently working on
+
+## Network Configuration
+
+### Configure Network Adapter
+
+1. Apply the network configuration:
+   ```bash
+   sudo cp ~/node_config/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml
+   sudo netplan apply
+   ```
+
+   > [!TIP]
+   > Verify network configuration with: `ip addr show`
+
+2. Reset the hostname:
+   ```bash
+   echo "" | sudo tee /etc/hostname > /dev/null
+   ```
+
+   > [!TIP]
+   > The hostname will be assigned by DHCP from the master node
+
+3. Configure DNS resolution:
+   ```bash
+   sudo unlink /etc/resolv.conf
+   sudo cp ~/node_config/resolv.conf /etc/resolv.conf
+   ```
+
+4. Apply changes:
+   ```bash
+   sudo reboot
+   ```
+
+   > [!TIP]
+   > After reboot, the node should receive its hostname and IP from the master's DHCP server
+
+## NFS Client Setup
+
+### Install and Configure NFS Client
+
+1. Install NFS client packages:
+   ```bash
+   sudo apt update
+   sudo apt install nfs-common -y
+   ```
+
+2. Create mount points:
+   ```bash
+   sudo mkdir -p /shared/data /shared/home
+   ```
+
+   > [!TIP]
+   > Check available NFS exports with: `showmount -e 192.168.56.1`
+
+### Configure AutoFS for Automatic Mounting
+
+1. Install AutoFS:
+   ```bash
+   sudo apt -y install autofs
+   ```
+
+2. Configure auto mount:
+   ```bash
+   echo '/shared /etc/auto.shared' | sudo tee -a /etc/auto.master > /dev/null
+   echo "# create new : [mount point] [option] [location]" | sudo tee /etc/auto.mount > /dev/null
+   echo "data    192.168.56.1:/shared" | sudo tee -a /etc/auto.mount > /dev/null
+   ```
+
+   > [!TIP]
+   > You can add more mount points by adding additional entries to the auto.mount file
+
+3. Restart AutoFS service:
+   ```bash
+   sudo systemctl restart autofs
+   sudo systemctl enable autofs
+   ```
+
+   > [!TIP]
+   > Verify mounts with: `df -h | grep shared` or `mount | grep nfs`
+
+## Verification and Testing
+
+1. Test NFS access:
+   ```bash
+   touch /shared/data/test-from-node-01
+   ls -la /shared/data/
+   ```
+
+2. Test network connectivity:
+   ```bash
+   ping -c 3 master
+   ping -c 3 node-02  # If you have other nodes
+   ```
+
+   > [!TIP]
+   > If you can't connect to other nodes, check the master's DHCP and DNS configuration
+
+3. Verify hostname assignment:
+   ```bash
+   hostname
+   cat /etc/hosts
+   ```
+
+---
+
+## Node Management
+
+### SSH Key Distribution
+
+For password-less access between nodes:
+
+1. From the master node, copy SSH keys to worker nodes:
+   ```bash
+   ssh-copy-id user01@node-01
+   ssh-copy-id user01@node-02
+   ```
+
+2. From worker nodes, copy SSH keys to master:
+   ```bash
+   ssh-keygen  # If not already done
+   ssh-copy-id user01@master
+   ```
+
+   > [!TIP]
+   > This enables seamless access between all cluster nodes
+
+### Monitoring Node Status
+
+Check node status from master:
 
 ```bash
-# Install NFS client
-sudo apt install nfs-common -y
-
-# Create mount points
-sudo mkdir -p /shared/data /shared/home
+for node in master node-01 node-02; do
+  echo -n "$node: "
+  ping -c 1 -W 1 $node >/dev/null && echo "UP" || echo "DOWN"
+done
 ```
 
 > [!TIP]
-> Check available NFS exports with: `showmount -e 192.168.56.1`
-
-### Set up automatically mounting
-
-Install necessary libraries
-
-```bash
-sudo apt -y install autofs
-```
-
-**Configure auto mount**
-
-```bash
-echo '/shared /etc/auto.shared' | sudo tee -a /etc/auto.master > /dev/null
-echo "# create new : [mount point] [option] [location]" | sudo tee /etc/auto.mount > /dev/null
-echo "data    192.168.56.1:/shared" | sudo tee -a /etc/auto.mount > /dev/null
-```
-
-Restart the service
-
-```bash
-sudo systemctl restart autofs
-```
-
-Add more configurations setups
-
-
-> [!TIP]
-
-> Verify mounts with: `df -h | grep shared` or `mount | grep nfs`
+> Save useful scripts like this in `/shared/scripts/` for access from any node

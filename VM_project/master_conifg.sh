@@ -180,10 +180,11 @@ sudo_exec "mkdir -p /shared /shared/data /shared/home" "Creating shared director
 sudo_exec "chmod 777 /shared /shared/data /shared/home" "Setting permissions on shared directories"
 # Configure exports idempotently
 log_info "Configuring NFS exports..."
-if ! ssh $SSH_OPTS -p $SSH_PORT ${USERNAME}@${HOST_IP} "grep -q '/shared/' /etc/exports"; then
-  sudo_exec "echo '/shared/  192.168.56.0/255.255.255.0\(rw,sync,no_root_squash,no_subtree_check\)' >> /etc/exports" "Appending NFS exports"
+# Check if /shared/ export exists and is not commented out
+if ! ssh $SSH_OPTS -p $SSH_PORT ${USERNAME}@${HOST_IP} "grep -q '^[^#].*/shared/' /etc/exports"; then
+  sudo_exec "echo '/shared/  192.168.56.0/255.255.255.0(rw,sync,no_root_squash,no_subtree_check)' >> /etc/exports" "Appending NFS exports"
 else
-  log_success "NFS exports already present"
+  log_success "NFS exports already present and active"
 fi
 sudo_exec "systemctl enable nfs-kernel-server" "Enabling NFS server on startup"
 sudo_exec "systemctl restart nfs-kernel-server" "Starting NFS server"
