@@ -1,5 +1,5 @@
 #!/bin/bash
-# Extended Node Setup Script
+# Improved Node Setup Script
 # Usage: ./setup_node.sh [node_name] [ssh_port] [password]
 
 set -e
@@ -7,11 +7,12 @@ set -e
 # Defaults
 DEFAULT_NODE_NAME="master"
 DEFAULT_SSH_PORT=3022
+DEFAULT_SSH_MASTER_PORT=3022  # Master node's SSH port
 DEFAULT_PASSWORD="test"
 USERNAME="user01"
 HOST_IP="127.0.0.1"
 NETWORK_NAME="CloudBasicNet"
-MAX_RETRIES=10
+MAX_RETRIES=15  # Increased for longer wait periods
 MASTER_IP="192.168.56.1"  # Master node IP on internal network
 # REMOVE BatchMode=yes to allow interactive password prompt
 SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=5"
@@ -59,10 +60,44 @@ wait_for_ssh() {
   echo; log_success "SSH is available!"; return 0
 }
 
+# New function to ensure master node is running
+ensure_master_running() {
+  if [[ "$NODE_NAME" != "master" ]]; then
+    log_info "Checking if master node exists and is running..."
+    if ! vm_exists "master"; then
+      log_error "Master node VM doesn't exist! Please set up the master node first."
+      exit 1
+    fi
+    
+    if ! vm_running "master"; then
+      log_info "Starting master node VM..."
+      VBoxManage startvm "master" --type headless
+      
+      # Wait for master node to be accessible via SSH
+      wait_for_ssh "$HOST_IP" "$DEFAULT_SSH_MASTER_PORT" || {
+        log_error "Could not connect to master node via SSH."
+        exit 1
+      }
+      
+      # Give master a bit more time to fully start services
+      log_info "Waiting for master node services to initialize..."
+      sleep 15
+    else
+      log_success "Master node is already running."
+    fi
+  fi
+}
+
 ssh_exec() {
   local cmd="$1" desc="${2:-Running command}"
   log_info "$desc..."
   ssh $SSH_OPTS -p $SSH_PORT ${USERNAME}@${HOST_IP} "$cmd" || { log_error "Failed: $desc"; return 1; }
+}
+
+ssh_exec_master() {
+  local cmd="$1" desc="${2:-Running command on master}"
+  log_info "$desc..."
+  ssh $SSH_OPTS -p $DEFAULT_SSH_MASTER_PORT ${USERNAME}@${HOST_IP} "$cmd" || { log_error "Failed: $desc"; return 1; }
 }
 
 sudo_exec() {
@@ -71,6 +106,15 @@ sudo_exec() {
   # Use base64 encoding to avoid quote escaping issues
   cmd_b64=$(echo "$cmd" | base64)
   ssh $SSH_OPTS -p $SSH_PORT ${USERNAME}@${HOST_IP} "echo '$PASSWORD' | sudo -S bash -c \"\$(echo '$cmd_b64' | base64 -d)\"" \
+    || { log_error "Failed: $desc (cmd: $cmd)"; return 1; }
+}
+
+sudo_exec_master() {
+  local cmd="$1" desc="${2:-Running sudo command on master}"
+  log_info "$desc..."
+  # Use base64 encoding to avoid quote escaping issues
+  cmd_b64=$(echo "$cmd" | base64)
+  ssh $SSH_OPTS -p $DEFAULT_SSH_MASTER_PORT ${USERNAME}@${HOST_IP} "echo '$PASSWORD' | sudo -S bash -c \"\$(echo '$cmd_b64' | base64 -d)\"" \
     || { log_error "Failed: $desc (cmd: $cmd)"; return 1; }
 }
 
@@ -97,6 +141,11 @@ echo " VM Name:   $NODE_NAME"
 echo " Username:  $USERNAME"
 echo " SSH Port:  $SSH_PORT"
 echo "=========================================================="
+
+# For non-master nodes, ensure master is running first
+if [[ "$NODE_NAME" != "master" ]]; then
+  ensure_master_running
+fi
 
 # Clone VM if needed
 vm_exists "template" || { log_error "'template' VM not found!"; exit 1; }
@@ -208,8 +257,8 @@ if [[ "$NODE_NAME" == "master" ]]; then
   # NFS server
   log_info "Setting up NFS server..."
   sudo_exec "apt install -y nfs-kernel-server" "Installing NFS server"
-  sudo_exec "mkdir -p /shared /shared/data /shared/home" "Creating shared directories"
-  sudo_exec "chmod 777 /shared /shared/data /shared/home" "Setting permissions on shared directories"
+  sudo_exec "mkdir -p /shared /shared/data /shared/home /shared/ssh-keys" "Creating shared directories"
+  sudo_exec "chmod 777 /shared /shared/data /shared/home /shared/ssh-keys" "Setting permissions on shared directories"
   
   # Configure exports idempotently
   log_info "Configuring NFS exports..."
@@ -221,6 +270,13 @@ if [[ "$NODE_NAME" == "master" ]]; then
   fi
   sudo_exec "systemctl enable nfs-kernel-server" "Enabling NFS server on startup"
   sudo_exec "systemctl restart nfs-kernel-server" "Starting NFS server"
+  
+  # Create SSH key on master if it doesn't exist
+  ssh_exec "[ -f ~/.ssh/id_ed25519 ] || ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ''" "Creating SSH key on master"
+  
+  # Store master's public key in shared directory for nodes to use
+  ssh_exec "cp ~/.ssh/id_ed25519.pub /shared/ssh-keys/master.pub" "Copying master's public key to shared directory"
+  
 else
   # Worker node specific configuration
   log_info "Configuring worker node services..."
@@ -231,7 +287,7 @@ else
   
   # NFS client setup
   sudo_exec "apt update && apt install -y nfs-common autofs" "Installing NFS client and AutoFS"
-  sudo_exec "mkdir -p /shared/data /shared/home" "Creating shared mount points"
+  sudo_exec "mkdir -p /shared/data /shared/home /shared/ssh-keys" "Creating shared mount points"
   
   # Configure AutoFS for automatic mounting
   sudo_exec "echo '/-      /etc/auto.shared' | tee -a /etc/auto.master > /dev/null" "Setting up AutoFS master configuration"
@@ -259,24 +315,32 @@ wait_for_ssh "$HOST_IP" "$SSH_PORT" || { log_error "Could not reconnect after re
 
 log_success "$NODE_NAME node setup complete!"
 
-if [[ "$NODE_NAME" == "master" ]]; then
-  log_info "Master node notes:"
-  echo -e " - If DNS issues occur after reboot, run: sudo systemctl ${BOLD}restart dnsmasq systemd-resolved${RESET}"
-  echo -e " - To verify NFS exports: ${BOLD}showmount -e localhost${RESET}"
-  echo -e " - Worker nodes can be accessed via: ${BOLD}ssh ${USERNAME}@node-XX${RESET} (where XX is the node number)"
-else
-  log_info "Worker node notes:"
-  echo -e " - NFS should automatically mount when accessing /shared/data or /shared/home"
-  echo -e " - Verify AutoFS mounts with: ${BOLD}ls -la /shared/data${RESET}"
-  echo -e " - Check connectivity to master with: ${BOLD}ping master${RESET}"
-  echo -e " - Verify hostname assignment with: ${BOLD}hostname${RESET}"
-  echo -e " - Check available NFS exports with: ${BOLD}showmount -e ${MASTER_IP}${RESET}"
-  echo -e " - Generate SSH keys with: ${BOLD}ssh-keygen${RESET} for passwordless access between nodes"
+# For worker nodes, handle SSH key setup so master can access worker nodes
+if [[ "$NODE_NAME" != "master" ]]; then
+  log_info "Waiting for DHCP hostname assignment..."
+  sleep 60  # Give time for full network initialization after reboot
+  
+  # Get assigned hostname from DHCP
+  ASSIGNED_HOSTNAME=$(ssh $SSH_OPTS -p "$SSH_PORT" "$USERNAME@$HOST_IP" hostname)
+  log_success "Node was assigned hostname: $ASSIGNED_HOSTNAME"
+  
+  # Setup authorized_keys on worker to allow master to SSH in
+  log_info "Setting up SSH access from master to worker..."
+  ssh_exec "mkdir -p ~/.ssh && chmod 700 ~/.ssh" "Ensuring worker's .ssh directory exists"
+  
+  # Copy master's public key to worker's authorized_keys
+  ssh_exec "cp /shared/ssh-keys/master.pub ~/.ssh/ && cat ~/.ssh/master.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys" "Adding master's key to worker's authorized_keys"
+  
+  # Test SSH connectivity from master to worker
+  log_info "Testing SSH connectivity from master to worker..."
+  ssh_exec_master "ssh $SSH_OPTS ${ASSIGNED_HOSTNAME} 'echo \"SSH from master to ${ASSIGNED_HOSTNAME} works!\"'" "Testing SSH from master to worker"
+  
+  log_success "Master to worker SSH access configured successfully!"
 fi
 
 # Add node status monitoring script
 if [[ "$NODE_NAME" == "master" ]]; then
-  log_info "Deploying existing node status monitoring script..."
+  log_info "Deploying node status monitoring script..."
 
   # Move script from copied master_config to shared location
   sudo_exec "mkdir -p /shared/scripts" "Creating shared scripts directory"
@@ -284,6 +348,20 @@ if [[ "$NODE_NAME" == "master" ]]; then
   sudo_exec "chmod +x /shared/scripts/check_node.sh" "Making monitoring script executable"
 
   log_success "Node monitoring script deployed to /shared/scripts/check_node.sh"
+fi
+
+if [[ "$NODE_NAME" == "master" ]]; then
+  log_info "Master node notes:"
+  echo -e " - If DNS issues occur after reboot, run: sudo systemctl ${BOLD}restart dnsmasq systemd-resolved${RESET}"
+  echo -e " - To verify NFS exports: ${BOLD}showmount -e localhost${RESET}"
+  echo -e " - Worker nodes can be accessed via: ${BOLD}ssh ${ASSIGNED_HOSTNAME}${RESET} (using hostname assigned by DHCP)"
+else
+  log_info "Worker node notes:"
+  echo -e " - NFS should automatically mount when accessing /shared/data or /shared/home"
+  echo -e " - Verify AutoFS mounts with: ${BOLD}ls -la /shared/data${RESET}"
+  echo -e " - Check connectivity to master with: ${BOLD}ping master${RESET}"
+  echo -e " - Verify hostname assignment with: ${BOLD}hostname${RESET}" 
+  echo -e " - Master node can SSH to this node using: ${BOLD}ssh ${ASSIGNED_HOSTNAME}${RESET}"
 fi
 
 echo -e "Connect via: ${YELLOW}${BOLD}ssh -i ~/.ssh/id_ed25519 -p $SSH_PORT $USERNAME@$HOST_IP${RESET}"
