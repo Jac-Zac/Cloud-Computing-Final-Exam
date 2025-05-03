@@ -2,6 +2,55 @@
 
 This guide walks through setting up a VM cluster for cloud environment testing, with one master node and multiple worker nodes.
 
+## Using the Automated Setup Script
+
+The `setup_node.sh` script automates the VM setup process for both master and worker nodes. It handles VM cloning, network configuration, SSH setup, and service configuration.
+
+### Prerequisites
+- VirtualBox installed
+- A template VM named "template" already created
+- Configuration directories:
+  - `master_config/` - Contains configuration files for master node
+  - `node_config/` - Contains generic configuration for worker nodes
+
+### Basic Usage
+
+```bash
+# Set up master node (will use port 3022 for SSH by default)
+./setup_node.sh master
+
+# Set up worker nodes (using different SSH ports)
+./setup_node.sh node-02 4022
+./setup_node.sh node-03 5022
+```
+
+### Advanced Usage
+
+You can specify the node name, SSH port, and password:
+
+```bash
+./setup_node.sh [node_name] [ssh_port] [password]
+```
+
+For example:
+```bash
+./setup_node.sh node-02 4022 custom_password
+```
+
+### Access Pattern
+- **Master Node**: Direct SSH access from your local machine
+- **Worker Nodes**: SSH access only through the master node
+
+Connect to the master node first:
+```bash
+ssh -i ~/.ssh/id_ed25519 -p 3022 user01@127.0.0.1
+```
+
+Then from master, connect to worker nodes:
+```bash
+ssh node-0n
+```
+
 ## Table of Contents
 - [Initial Template Setup](#initial-template-setup)
 - [Cloning VMs](#cloning-vms)
@@ -35,7 +84,6 @@ Clone the template VM to create your cluster:
 
 ```bash
 VBoxManage clonevm "template" --name "master" --register --mode all
-VBoxManage clonevm "template" --name "node-01" --register --mode all
 VBoxManage clonevm "template" --name "node-02" --register --mode all
 ```
 
@@ -56,7 +104,7 @@ VBoxManage modifyvm "VM_NAME" --nic2 intnet
 VBoxManage modifyvm "VM_NAME" --intnet2 "CloudBasicNet"
 ```
 
-Replace `VM_NAME` with "master", "node-01", etc. for each machine.
+Replace `VM_NAME` with "master", "node-02", etc. for each machine.
 
 ### Enable SSH Port Forwarding
 
@@ -67,7 +115,7 @@ Configure port forwarding to access VMs via SSH:
 VBoxManage modifyvm "master" --natpf1 "ssh,tcp,127.0.0.1,3022,,22"
 
 # For worker node 1 (accessible on localhost:4022)
-VBoxManage modifyvm "node-01" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
+VBoxManage modifyvm "node-02" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
 
 # Add similar rules for other nodes as needed
 ```
@@ -119,6 +167,7 @@ scp -P 3022 -r master_config user01@127.0.0.1:~
 > To copy files from the VM to your host machine, reverse the source and destination:
 > ```bash
 > scp -P 3022 user01@127.0.0.1:~/config_file ./local_directory/
+> ```
 
 Create a key also on the master node:
 
@@ -238,8 +287,8 @@ ssh-keygen
 
 5. Create shared directories:
    ```bash
-   sudo mkdir -p /shared/data /shared/home
-   sudo chmod 777 /shared/data /shared/home
+   sudo mkdir -p /shared/data /shared/home /shared/ssh-keys
+   sudo chmod 777 /shared/data /shared/home /shared/ssh-keys
    ```
 
 ---
@@ -249,7 +298,7 @@ ssh-keygen
 > [!TIP]
 > ```bash
 > # Access worker nodes from master
-> ssh user01@node-01
+> ssh user01@node-02
 > ```
 
 ## Initial Setup
@@ -263,7 +312,7 @@ ssh-keygen
 
 2. SSH into the worker node:
    ```bash
-   ssh user01@node-01
+   ssh user01@node-02
    ```
 
    > [!TIP]
@@ -353,7 +402,7 @@ ssh-keygen
 
 1. Test NFS access:
    ```bash
-   touch /shared/data/test-from-node-01
+   touch /shared/data/test-from-node-02
    ls -la /shared/data/
    ```
 
@@ -382,8 +431,8 @@ For password-less access between nodes:
 
 1. From the master node, copy SSH keys to worker nodes:
    ```bash
-   ssh-copy-id user01@node-01
    ssh-copy-id user01@node-02
+   ssh-copy-id user01@node-03
    ```
 
 2. From worker nodes, copy SSH keys to master:
@@ -400,9 +449,23 @@ For password-less access between nodes:
 Check node status from master:
 
 ```bash
-for node in master node-01 node-02; do
+#!/bin/bash
+
+# Default number of nodes
+n=${1:-9}
+
+# Build the node list
+nodes=(master)
+for i in $(seq 1 "$n"); do
+  num=$(printf "%02d" "$i")   # Always 2 digits, zero-padded
+  nodes+=("node-$num")
+done
+
+# Node status monitoring script
+echo "Checking node status (up to node-$(printf "%02d" "$n")):"
+for node in "${nodes[@]}"; do
   echo -n "$node: "
-  ping -c 1 -W 1 $node >/dev/null && echo "UP" || echo "DOWN"
+  ping -c 1 -W 1 "$node" >/dev/null && echo "UP" || echo "DOWN"
 done
 ```
 

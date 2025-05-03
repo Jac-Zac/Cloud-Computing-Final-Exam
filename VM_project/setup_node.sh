@@ -188,29 +188,28 @@ fi
 # SSH wait
 wait_for_ssh "$HOST_IP" "$SSH_PORT" || { log_error "Could not connect via SSH."; exit 1; }
 
-# SSH keys
-log_info "Setting up SSH key authentication..."
-[ -f ~/.ssh/id_ed25519 ] || (ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" && log_success "SSH key generated.")
-ssh_exec "mkdir -p ~/.ssh && chmod 700 ~/.ssh" "Creating .ssh directory"
-scp -q $SSH_OPTS -P "$SSH_PORT" ~/.ssh/id_ed25519.pub "${USERNAME}@${HOST_IP}:~/id_ed25519.pub"
-ssh_exec "cat ~/id_ed25519.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm ~/id_ed25519.pub" "Installing public key"
-ssh -i ~/.ssh/id_ed25519 $SSH_OPTS -p "$SSH_PORT" "$USERNAME@$HOST_IP" "echo 'SSH key auth works!'" && log_success "SSH key verified."
+# SSH keys - Only set up for master node
+if [[ "$NODE_NAME" == "master" ]]; then
+  log_info "Setting up SSH key authentication for master node..."
+  # Check if local SSH key exists, if not generate it
+  [ -f ~/.ssh/id_ed25519 ] || (ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" && log_success "SSH key generated.")
+  
+  # Copy the local SSH key to master node
+  ssh_exec "mkdir -p ~/.ssh && chmod 700 ~/.ssh" "Creating .ssh directory on master"
+  scp -q $SSH_OPTS -P "$SSH_PORT" ~/.ssh/id_ed25519.pub "${USERNAME}@${HOST_IP}:~/id_ed25519.pub"
+  ssh_exec "cat ~/id_ed25519.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm ~/id_ed25519.pub" "Installing public key on master"
+  ssh -i ~/.ssh/id_ed25519 $SSH_OPTS -p "$SSH_PORT" "$USERNAME@$HOST_IP" "echo 'SSH key auth works!'" && log_success "SSH key verified on master."
+fi
+# For worker nodes, we'll skip this step as they'll only be accessible from master
 
 # Copy config directory
-CONFIG_DIR="${NODE_NAME}_config"
 if [[ "$NODE_NAME" == "master" && -d "master_config" ]]; then
   CONFIG_DIR="master_config"
-elif [[ -d "${NODE_NAME}_config" ]]; then
-  CONFIG_DIR="${NODE_NAME}_config"
 else
   # If no specific config exists, use default config
   if [[ -d "node_config" ]]; then
     CONFIG_DIR="node_config"
     log_warn "Using generic node configuration directory."
-  else
-    log_error "Configuration directory for ${NODE_NAME} not found!"
-    log_info "Please create either '${NODE_NAME}_config' or 'node_config' directory."
-    exit 1
   fi
 fi
 
@@ -355,13 +354,14 @@ if [[ "$NODE_NAME" == "master" ]]; then
   echo -e " - If DNS issues occur after reboot, run: sudo systemctl ${BOLD}restart dnsmasq systemd-resolved${RESET}"
   echo -e " - To verify NFS exports: ${BOLD}showmount -e localhost${RESET}"
   echo -e " - Worker nodes can be accessed via: ${BOLD}ssh ${ASSIGNED_HOSTNAME}${RESET} (using hostname assigned by DHCP)"
+  # SSH connection info for master node only
+  echo -e "Connect to master via: ${YELLOW}${BOLD}ssh -i ~/.ssh/id_ed25519 -p $SSH_PORT $USERNAME@$HOST_IP${RESET}"
 else
   log_info "Worker node notes:"
   echo -e " - NFS should automatically mount when accessing /shared/data or /shared/home"
   echo -e " - Verify AutoFS mounts with: ${BOLD}ls -la /shared/data${RESET}"
   echo -e " - Check connectivity to master with: ${BOLD}ping master${RESET}"
   echo -e " - Verify hostname assignment with: ${BOLD}hostname${RESET}" 
-  echo -e " - Master node can SSH to this node using: ${BOLD}ssh ${ASSIGNED_HOSTNAME}${RESET}"
+  echo -e " - Access worker nodes by first SSHing to master, then: ${BOLD}ssh ${ASSIGNED_HOSTNAME}${RESET}"
+  echo -e " - ${YELLOW}${BOLD}Note: Worker nodes are not directly accessible from your local machine${RESET}"
 fi
-
-echo -e "Connect via: ${YELLOW}${BOLD}ssh -i ~/.ssh/id_ed25519 -p $SSH_PORT $USERNAME@$HOST_IP${RESET}"
