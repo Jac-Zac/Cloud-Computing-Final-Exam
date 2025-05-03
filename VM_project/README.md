@@ -331,9 +331,10 @@ ssh-keygen
 
 2. Configure auto mount:
    ```bash
-   echo '/shared /etc/auto.shared' | sudo tee -a /etc/auto.master > /dev/null
-   echo "# create new : [mount point] [option] [location]" | sudo tee /etc/auto.mount > /dev/null
-   echo "data    192.168.56.1:/shared" | sudo tee -a /etc/auto.mount > /dev/null
+   # Enable the direct mounting point to the master
+   echo '/-      /etc/auto.shared' | sudo tee -a /etc/auto.master > /dev/null
+   # Mount the shared master directory to /shared in the node
+   echo "/shared    master:/shared" | sudo tee -a /etc/auto.mount > /dev/null
    ```
 
    > [!TIP]
@@ -341,8 +342,8 @@ ssh-keygen
 
 3. Restart AutoFS service:
    ```bash
-   sudo systemctl restart autofs
    sudo systemctl enable autofs
+   sudo systemctl restart autofs
    ```
 
    > [!TIP]

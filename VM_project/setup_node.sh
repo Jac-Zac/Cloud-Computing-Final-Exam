@@ -234,16 +234,12 @@ else
   sudo_exec "mkdir -p /shared/data /shared/home" "Creating shared mount points"
   
   # Configure AutoFS for automatic mounting
-  sudo_exec "echo '/shared /etc/auto.shared' | tee -a /etc/auto.master > /dev/null" "Setting up AutoFS master configuration"
-  sudo_exec "echo '# create new : [mount point] [option] [location]' | tee /etc/auto.shared > /dev/null" "Creating AutoFS shared configuration"
+  sudo_exec "echo '/-      /etc/auto.shared' | tee -a /etc/auto.master > /dev/null" "Setting up AutoFS master configuration"
+  sudo_exec "echo '/shared    master:/shared' | tee /etc/auto.shared > /dev/null" "Creating AutoFS shared configuration"
   
   # Start and enable AutoFS
-  # sudo_exec "systemctl restart autofs" "Restarting AutoFS service"
-  # sudo_exec "systemctl enable autofs" "Enabling AutoFS on startup"
-  
-  # Alternative direct mount for testing
-  # sudo_exec "mkdir -p /mnt/shared_test" "Creating test mount point"
-  # sudo_exec "mount -t nfs ${MASTER_IP}:/shared/data /mnt/shared_test || true" "Testing direct NFS mount"
+  sudo_exec "systemctl enable autofs" "Enabling AutoFS on startup"
+  sudo_exec "systemctl restart autofs" "Restarting AutoFS service"
 fi
 
 # Verification & reboot
