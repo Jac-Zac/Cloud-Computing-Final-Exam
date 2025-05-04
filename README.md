@@ -8,7 +8,7 @@
 | Containers Performance Test|  *Part 2* of the exam | [Containers Setup and Test](./Containers) |
 
 ## Objective
-Evaluate and compare the performance of virtual machines (VMs), containers.
+Evaluate and compare the performance of virtual machines (VMs), containers, [this is the Assignments](https://github.com/Foundations-of-HPC/Cloud-basic-2024/tree/main/Assignments).
 
 ---
 

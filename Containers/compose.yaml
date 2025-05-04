@@ -1,0 +1,53 @@
+services:
+  master:
+    build: .
+    # fixed name for hostname resolution
+    container_name: master
+    environment:
+      # used by entrypoint script to know this is master
+      - NODE_ROLE=master             
+    volumes:
+      - hpc-shared:/shared
+    networks:
+      - hpcnet
+    healthcheck: # check that SSH port 22 is open:contentReference[oaicite:6]{index=6}
+      test: ["CMD", "nc", "-z", "localhost", "22"] 
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Node configuration
+  node-01:
+    # use same Dockerfile (Ubuntu + SSH) for worker
+    build: .
+    container_name: node-01
+    environment:
+      - NODE_ROLE=worker
+    volumes:
+      - hpc-shared:/shared
+    networks:
+      - hpcnet
+    depends_on:
+      # ensure master starts first (for ordering)
+      - master
+
+  node-02:
+    build: .
+    container_name: node-02
+    environment:
+      - NODE_ROLE=worker
+    volumes:
+      - hpc-shared:/shared
+    networks:
+      - hpcnet
+    depends_on:
+      - master
+
+# named volume used by all nodes for shared directory
+volumes:
+  hpc-shared:
+
+# user-defined bridge network (default type):contentReference[oaicite:7]{index=7} 
+networks:
+  hpcnet:
+    driver: bridge
