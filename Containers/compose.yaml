@@ -1,6 +1,12 @@
 services:
   master:
     build: .
+    # Add limited resources
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
     # fixed name for hostname resolution
     container_name: master
     environment:

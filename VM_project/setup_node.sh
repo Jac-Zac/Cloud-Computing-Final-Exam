@@ -207,10 +207,7 @@ if [[ "$NODE_NAME" == "master" && -d "master_config" ]]; then
   CONFIG_DIR="master_config"
 else
   # If no specific config exists, use default config
-  if [[ -d "node_config" ]]; then
-    CONFIG_DIR="node_config"
-    log_warn "Using generic node configuration directory."
-  fi
+  CONFIG_DIR="node_config"
 fi
 
 log_info "Copying configuration directory ($CONFIG_DIR)..."
