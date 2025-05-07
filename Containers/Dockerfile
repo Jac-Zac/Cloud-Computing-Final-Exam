@@ -2,6 +2,7 @@ FROM ubuntu:20.04
 
 WORKDIR /app
 
+# To avoid having interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install SSH, netcat (for healthcheck), and benchmarking tools

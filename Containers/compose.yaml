@@ -53,6 +53,9 @@ services:
 volumes:
   hpc-shared:
 
+
+# TODO: I belive this does the rule of the network adapter I have in VMs and also the dnsmasq assignment of IPs to talk to each other or something like that
+
 # user-defined bridge network (default type):contentReference[oaicite:7]{index=7} 
 networks:
   hpcnet:

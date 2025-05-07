@@ -1,4 +1,5 @@
 #!/bin/bash
+# Script to enable master to access the other containers via ssh
 set -e
 
 echo "Container starting with role: $NODE_ROLE"
@@ -32,5 +33,5 @@ fi
 chmod 700 /root/.ssh
 chmod 600 /root/.ssh/*
 
-# Start SSH server in foreground
+# SSHD runs in foreground, container stays up
 exec /usr/sbin/sshd -D
