@@ -1,246 +1,183 @@
 # Cloud Computing Performance Testing Guide
 
-This guide provides a complete implementation plan for comparing performance between virtual machines and containers.
+This guide provides a complete implementation plan for comparing performance between virtual machines (VMs), containers, and optionally, the host system.
+
+---
 
 ## Part 1: VM Performance Testing
 
 ### 1. Environment Setup
 
-Create a complete VM environment:
+- Create 2-3 virtual machines (Ubuntu recommended).
+- Allocate each VM with 2 vCPUs and 2GB RAM.
+- Set up a shared or bridged network so VMs can communicate.
+- Ensure passwordless SSH is set up between host and VMs, or prepare to use `scp`.
+
+### 2. Install Benchmark Suite
+
+On each VM, run the following:
 
 ```bash
-# Set up master node
-./setup_node.sh master 3022
-
-# Set up worker nodes
-./setup_node.sh node-02 4022
-./setup_node.sh node-03 5022
+sudo apt update && sudo apt install -y sysbench stress-ng iozone3 iperf3 hpcc
 ```
 
-### 2. Install Benchmarking Tools
-
-SSH into your master node and install the required benchmarking tools:
+Or use the provided script:
 
 ```bash
-ssh -p 3022 user01@127.0.0.1
-
-# On master node:
-sudo apt update
-sudo apt install -y sysbench iozone3 iperf3 build-essential libopenmpi-dev openmpi-bin
+./install-deps.sh
 ```
 
-#### Installing HPC Challenge Benchmark
+### 3. Copy Benchmark Scripts
+
+Use `scp` to copy scripts from your Mac host to each VM:
 
 ```bash
-# Install HPCC
-sudo apt-get update
-sudo apt-get install -y hpcc
-
-# Check installation
-which hpcc
+scp -r ./cloud-benchmark user@<vm-ip>:/home/user/
 ```
 
-### 3. Create a Benchmark Script
+### 4. Run Benchmarks
 
-Create a benchmarking script on your master node that will run tests. You can use the `benchmark.sh` script you already have:
+SSH into the VM and execute:
 
 ```bash
-# Copy your benchmark script to master
-scp -P 3022 benchmark.sh user01@127.0.0.1:~/benchmark.sh
-
-# Make it executable
-ssh -p 3022 user01@127.0.0.1 "chmod +x ~/benchmark.sh"
+./run-all.sh vm1 vm node <master-ip-if-needed>
 ```
 
-### 4. Configure HPL for High-Performance Linpack
-
-Create an HPL.dat configuration file for the master node:
+After the run, copy results back to your Mac:
 
 ```bash
-scp -P 3022 HPL.dat user01@127.0.0.1:~/HPL.dat
+scp user@<vm-ip>:/tmp/benchmark-results/* ~/benchmark-results/vm1/
 ```
 
-### 5. Run VM Performance Tests
+Repeat for each VM.
 
-On the master node, run the benchmark tests:
-
-```bash
-# Run CPU benchmark on master
-./benchmark.sh master vm master
-
-# Start network benchmark server on master
-iperf3 -s &
-
-# Connect to node-02 and run benchmarks there
-ssh node-02
-./benchmark.sh node-02 vm node master
-
-# Connect to node-03 and run benchmarks there
-ssh node-03
-./benchmark.sh node-03 vm node master
-
-# Run HPL benchmark on master
-hpcc
-```
+---
 
 ## Part 2: Container Performance Testing
 
-### 1. Build and Run Docker Containers
+### 1. Docker Environment Setup
+
+- Install Docker and Docker Compose on your Mac.
+- Use the provided `docker-compose.yml` to spin up containers.
+- Logs will be saved to a mounted host directory.
 
 ```bash
-# Build containers (from directory containing Dockerfile, compose.yaml, etc.)
-docker-compose build
-
-# Start the container cluster
 docker-compose up -d
-
-# Verify containers are running
-docker-compose ps
 ```
 
-### 2. Run Container Performance Tests
+### 2. Run Benchmarks Inside Containers
+
+Attach to a container:
 
 ```bash
-# Run benchmark on master container
-docker exec master /app/benchmark.sh master container master
-
-# Run benchmark on worker nodes
-docker exec node-01 /app/benchmark.sh node-01 container node master
-docker exec node-02 /app/benchmark.sh node-02 container node master
-
-# Run HPL benchmark on master container
-docker exec master hpcc
+docker exec -it node1 bash
 ```
 
-## Part 2: Test Host Machine Performance (Optional)
+Execute the script:
 
 ```bash
-# Install benchmarking tools on host
-sudo apt update
-sudo apt install -y sysbench iozone3 iperf3 build-essential libopenmpi-dev openmpi-bin
-
-# Run benchmarks on host
-./benchmark.sh localhost host standalone
+./run-all.sh container1 container node <master-ip-if-needed>
 ```
 
-## Part 3: Collecting and Analyzing Results
+Results will be automatically saved to `./benchmark-results` on your Mac.
 
-### 1. Collecting Results
+---
+
+## Part 3: Host System Testing (Optional)
+
+To test your Mac (host) with same resource limits:
 
 ```bash
-# From host, collect VM results
-scp -P 3022 user01@127.0.0.1:/tmp/benchmark-results/* ./vm-results/
-
-# Collect container results
-docker cp master:/tmp/benchmark-results ./container-results-master
-docker cp node-01:/tmp/benchmark-results ./container-results-node01
-docker cp node-02:/tmp/benchmark-results ./container-results-node02
+sudo systemd-run --scope -p CPUQuota=200% -p MemoryLimit=2G ./run-all.sh localhost host standalone
 ```
 
-### 2. Analyzing Results
+Or use `cpulimit` if `systemd-run` is not available:
 
-Create a comparison table focusing on these key metrics:
-
-1. **CPU Performance**:
-   - Events per second from sysbench
-   - FLOPS from HPL
-
-2. **Disk I/O Performance**:
-   - Read/Write throughput from IOZone
-   - Random access performance
-
-3. **Network Performance**:
-   - Bandwidth between nodes (iperf3)
-   - Latency between nodes
-
-### 3. Report Template
-
-#### Introduction
-- Brief description of the test environment
-- Hardware specifications of host machine
-- VM and container configurations
-
-#### Methodology
-- Description of tools used
-- Test parameters and scenarios
-- Resource allocation for VMs and containers
-
-#### Results
-- CPU performance comparison (table and graphs)
-- Disk I/O performance comparison (table and graphs)
-- Network performance comparison (table and graphs)
-
-#### Analysis
-- Performance overhead of virtualization vs. containerization
-- Impact of resource constraints
-- Scalability observations
-- File system performance differences
-
-#### Conclusion
-- Summary of findings
-- Recommendations for different workloads
-- Limitations of the testing methodology
-
-## Troubleshooting Tips
-
-### VM Network Issues
-If VMs cannot communicate:
 ```bash
-# Check network configuration
-ip addr show
-cat /etc/netplan/50-cloud-init.yaml
-
-# Verify DNS resolution
-nslookup master
-cat /etc/resolv.conf
+cpulimit -l 200 -z ./run-all.sh localhost host standalone
 ```
 
-### Container Network Issues
-If containers cannot communicate:
+Logs will be saved in `~/benchmark-results`.
+
+---
+
+## Running All Benchmarks
+
+Use the `run-all.sh` script to automate all tests:
+
 ```bash
-# Check Docker network
-docker network inspect hpcnet
-
-# Test connectivity between containers
-docker exec master ping node-01
+./run-all.sh <target-name> <mode> <role> [master-ip]
 ```
 
-### Benchmark Tool Issues
-If benchmarks fail to run:
+Examples:
+
 ```bash
-# Check tool installation
-which sysbench iozone hpcc iperf3
-
-# Verify script permissions
-ls -la /app/benchmark.sh
+./run-all.sh vm1 vm master
+./run-all.sh container1 container node 172.28.1.10
+./run-all.sh localhost host standalone
 ```
 
-## Advanced Testing Options
+Each test will call individual scripts:
 
-### Testing with Different VM Configurations
-Experiment with different VM configurations:
-- CPU allocation (1, 2, 4 cores)
-- Memory allocation (1GB, 2GB, 4GB)
-- Different virtual disk types (VDI, VMDK)
+- `cpu-benchmark.sh`
+- `mem-benchmark.sh`
+- `disk-benchmark.sh`
+- `network-benchmark.sh`
+- `hpc-benchmark.sh`
 
-### Testing with Different Container Resource Limits
-Modify your compose.yaml to test different container limits:
-```yaml
-deploy:
-  resources:
-    limits:
-      cpus: "1.0"  # Try 1.0, 2.0, 4.0
-      memory: 1g   # Try 1g, 2g, 4g
-```
+---
 
-### Testing NFS Performance
-For VMs:
+## Log Collection
+
+All logs are saved under:
+
 ```bash
-# Mount NFS on workers
-sudo mount master:/shared /mnt/nfs
-
-# Test NFS performance
-iozone -i 0 -i 1 -i 2 -s 100M -r 64k -f /mnt/nfs/test.dat
+~/benchmark-results/
 ```
 
-For containers, add NFS volume to compose.yaml and test similarly.
+VMs: use `scp` to collect logs.
+
+Containers: logs are mounted directly to `./benchmark-results` on your host.
+
+---
+
+## Tools Used
+
+- `sysbench`: CPU and memory stress testing
+- `stress-ng`: Advanced stress testing
+- `iozone`: Disk I/O performance
+- `iperf3`: Network throughput testing
+- `hpcc`: HPC-style benchmarking (on VMs or containers with MPI)
+
+---
+
+## Plotting and Analysis
+
+1. Install Python and matplotlib:
+
+```bash
+pip install matplotlib pandas
+```
+
+2. Use the provided script `plot-results.py` to generate plots:
+
+```bash
+python3 plot-results.py ~/benchmark-results/
+```
+
+3. The script will parse logs and generate CPU, memory, disk, and network performance comparisons across:
+
+- VM
+- Container
+- Host
+
+4. Charts will be saved under `~/benchmark-results/plots/`
+
+---
+
+## Deliverables
+
+- Full logs in `~/benchmark-results/`
+- Summary plots in `~/benchmark-results/plots/`
+- Final report comparing performance across environments
+- Observations on virtualization overhead and efficiency
