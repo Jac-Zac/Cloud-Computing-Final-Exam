@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install SSH, netcat (for healthcheck), and benchmarking tools
 RUN apt-get update && \
     apt-get install -y openssh-server netcat iproute2 \
-    sysbench iozone3 iperf3 build-essential libopenmpi-dev openmpi-bin hpcc && \
+    stress-ng sysbench iozone3 iperf3 build-essential libopenmpi-dev openmpi-bin hpcc && \
     apt-get clean
 
 # Create SSH run directory

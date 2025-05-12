@@ -11,13 +11,13 @@ services:
     container_name: master
     environment:
       # used by entrypoint script to know this is master
-      - NODE_ROLE=master             
+      - NODE_ROLE=master
     volumes:
       - hpc-shared:/shared
     networks:
       - hpcnet
     healthcheck: # check that SSH port 22 is open:contentReference[oaicite:6]{index=6}
-      test: ["CMD", "nc", "-z", "localhost", "22"] 
+      test: ["CMD", "nc", "-z", "localhost", "22"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -26,6 +26,11 @@ services:
   node-01:
     # use same Dockerfile (Ubuntu + SSH) for worker
     build: .
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
     container_name: node-01
     environment:
       - NODE_ROLE=worker
@@ -39,6 +44,11 @@ services:
 
   node-02:
     build: .
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
     container_name: node-02
     environment:
       - NODE_ROLE=worker
@@ -53,10 +63,9 @@ services:
 volumes:
   hpc-shared:
 
-
 # TODO: I belive this does the rule of the network adapter I have in VMs and also the dnsmasq assignment of IPs to talk to each other or something like that
 
-# user-defined bridge network (default type):contentReference[oaicite:7]{index=7} 
+# user-defined bridge network (default type):contentReference[oaicite:7]{index=7}
 networks:
   hpcnet:
     driver: bridge
