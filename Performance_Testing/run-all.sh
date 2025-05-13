@@ -3,25 +3,20 @@ set -e
 
 show_help() {
   cat << EOF
-Usage: $(basename "$0") TARGET MODE ROLE MASTER_IP
+Usage: $(basename "$0") TARGET MODE ROLE MASTER_IP [BENCHMARKS]
 
-Run a series of benchmarks (cpu, mem, disk, net, hpl) on the specified TARGET.
+Run selected or all benchmarks (cpu, mem, disk, net, hpl) on the specified TARGET.
 
 Arguments:
-  TARGET     The target machine or environment to run benchmarks on
-  MODE       The mode of operation (e.g., test, production)
-  ROLE       The role of the node (e.g., master, worker)
-  MASTER_IP  The IP address of the master node
+  TARGET      The target machine or environment to run benchmarks on
+  MODE        The mode of operation (e.g., test, production)
+  ROLE        The role of the node (e.g., master, worker)
+  MASTER_IP   The IP address of the master node
+  BENCHMARKS  (Optional) Comma-separated list of benchmarks to run (e.g., cpu,mem)
+              If not provided, all benchmarks will be run.
 
 Example:
-  $(basename "$0") node01 test master 192.168.1.10
-
-This script will sequentially execute the following benchmark scripts:
-  cpu-benchmark.sh
-  mem-benchmark.sh
-  disk-benchmark.sh
-  net-benchmark.sh
-  hpl-benchmark.sh
+  $(basename "$0") node01 test master 192.168.1.10 cpu,mem
 EOF
 }
 
@@ -31,7 +26,7 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   exit 0
 fi
 
-if [[ $# -ne 4 ]]; then
+if [[ $# -lt 4 || $# -gt 5 ]]; then
   echo "Error: Invalid number of arguments."
   show_help
   exit 1
@@ -41,9 +36,21 @@ TARGET=$1
 MODE=$2
 ROLE=$3
 MASTER_IP=$4
-
 SCRIPTS_DIR="$(dirname "$0")"
 
-for BENCH in cpu mem disk net hpl; do
-  "$SCRIPTS_DIR/${BENCH}-benchmark.sh" "$TARGET" "$MODE" "$ROLE" "$MASTER_IP"
+# Default to all benchmarks if not specified
+if [[ -n "$5" ]]; then
+  IFS=',' read -ra BENCHMARKS <<< "$5"
+else
+  BENCHMARKS=(cpu mem disk net hpl)
+fi
+
+for BENCH in "${BENCHMARKS[@]}"; do
+  SCRIPT="$SCRIPTS_DIR/${BENCH}-benchmark.sh"
+  if [[ -x "$SCRIPT" ]]; then
+    "$SCRIPT" "$TARGET" "$MODE" "$ROLE" "$MASTER_IP"
+  else
+    echo "Warning: Benchmark script '$SCRIPT' not found or not executable. Skipping."
+  fi
 done
+

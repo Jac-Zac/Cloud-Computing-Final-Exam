@@ -35,10 +35,10 @@ function log_error {
   echo -e "${RED}[$(date +%T)] $1${RESET}" | tee -a "$RESULTS"
 }
 
-log_info "🔧 Starting benchmark for: $TARGET ($MODE/$ROLE)"
-log_info "📄 Output will be saved to: $RESULTS"
+log_info "Starting benchmark for: $TARGET ($MODE/$ROLE)"
+log_info "Output will be saved to: $RESULTS"
 log_info "==============================="
-log_info "🖥️  System Info:"
+log_info "System Info:"
 log_info "OS: $(grep PRETTY_NAME /etc/os-release | cut -d'\"' -f2)"
 log_info "CPU: $(grep 'model name' /proc/cpuinfo | head -1 | cut -d':' -f2 | xargs)"
 log_info "RAM: $(free -h | awk '/Mem:/ {print $2}')"
