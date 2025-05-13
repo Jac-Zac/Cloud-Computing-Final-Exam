@@ -1,39 +1,51 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
-WORKDIR /app
-
-# To avoid having interactive prompts
+# Set non-interactive mode for apt
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install SSH, netcat (for healthcheck), and benchmarking tools
-RUN apt-get update && \
-    apt-get install -y openssh-server netcat iproute2 \
-    stress-ng sysbench iozone3 iperf3 build-essential libopenmpi-dev openmpi-bin hpcc && \
-    apt-get clean
+# Install essential packages
+RUN apt-get update && apt-get install -y \
+    openssh-server \
+    sudo \
+    sysbench \
+    iozone3 \
+    iperf3 \
+    mpich \
+    stress-ng \
+    python3 \
+    python3-pip \
+    netcat \
+    htop \
+    vim \
+    git \
+    build-essential \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create SSH run directory
-RUN mkdir -p /var/run/sshd
+# Install Python packages for plotting
+RUN pip3 install matplotlib pandas
 
-# Allow root login via passwordless SSH
-RUN echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config && \
-    echo 'StrictHostKeyChecking no' >> /etc/ssh/ssh_config
+# Setup SSH
+RUN mkdir /var/run/sshd
+# Generate SSH host keys
+RUN ssh-keygen -A
+# Setup passwordless SSH (for MPI)
+RUN mkdir -p /root/.ssh
+RUN ssh-keygen -t rsa -f /root/.ssh/id_rsa -N ""
+RUN cat /root/.ssh/id_rsa.pub > /root/.ssh/authorized_keys
+RUN chmod 600 /root/.ssh/authorized_keys
+# Trust all hosts (for simplicity in test env)
+RUN echo "Host *\n\tStrictHostKeyChecking no\n\tUserKnownHostsFile /dev/null" > /root/.ssh/config
 
-# Create shared directory mount point
-RUN mkdir -p /shared
-
-# Add benchmark script
-COPY ../Performance_Testing/benchmark.sh /app/benchmark.sh
-RUN chmod +x /app/benchmark.sh
+# Create benchmark directory
+RUN mkdir -p /benchmark /shared /tmp/benchmark-results
 
 # Add entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Copy HPL configuration
-COPY ../Performance_Testing/HPL.dat /app/HPL.dat
-
 # Expose SSH port
 EXPOSE 22
 
-# Run the entrypoint script
+# Start SSH server and keep container running
 ENTRYPOINT ["/entrypoint.sh"]

@@ -1,27 +1,46 @@
-# Cloud Computing Performance Testing Guide
+# ☁️ Cloud Computing Performance Testing Guide
 
-This guide provides a complete implementation plan for comparing performance between virtual machines (VMs), containers, and optionally, the host system.
+This guide provides a comprehensive implementation plan for benchmarking and comparing performance across **virtual machines (VMs)**, **containers**, and the **host system**. It automates CPU, memory, disk, network, and HPC-style testing using open-source tools.
 
 ---
 
-## Part 1: VM Performance Testing
+## 📆 Project Structure
+
+```
+.
+├── bin/
+│   ├── common.sh
+│   ├── cpu-benchmark.sh
+│   ├── disk-benchmark.sh
+│   ├── mem-benchmark.sh
+│   ├── net-benchmark.sh
+│   └── hpl-benchmark.sh
+├── run-all.sh
+├── install-deps.sh
+├── docker-compose.yml
+└── README.md
+```
+
+---
+
+## 🚀 Part 1: VM Performance Testing
 
 ### 1. Environment Setup
 
-- Create 2-3 virtual machines (Ubuntu recommended).
-- Allocate each VM with 2 vCPUs and 2GB RAM.
-- Set up a shared or bridged network so VMs can communicate.
-- Ensure passwordless SSH is set up between host and VMs, or prepare to use `scp`.
+- Create 2-3 Ubuntu virtual machines (e.g., via VirtualBox or cloud provider).
+- Allocate 2 vCPUs and 2GB RAM per VM.
+- Use a bridged or host-only adapter to ensure network connectivity.
+- Set up passwordless SSH or prepare to use `scp` for file transfers.
 
-### 2. Install Benchmark Suite
+### 2. Install Benchmark Dependencies
 
-On each VM, run the following:
+On each VM:
 
 ```bash
 sudo apt update && sudo apt install -y sysbench stress-ng iozone3 iperf3 hpcc
 ```
 
-Or use the provided script:
+Or use:
 
 ```bash
 ./install-deps.sh
@@ -29,84 +48,80 @@ Or use the provided script:
 
 ### 3. Copy Benchmark Scripts
 
-Use `scp` to copy scripts from your Mac host to each VM:
+From your host:
 
 ```bash
 scp -r ./cloud-benchmark user@<vm-ip>:/home/user/
+chmod +x /home/user/cloud-benchmark/bin/*.sh
 ```
 
 ### 4. Run Benchmarks
 
-SSH into the VM and execute:
+SSH into each VM:
 
 ```bash
-./run-all.sh vm1 vm node <master-ip-if-needed>
+cd cloud-benchmark
+./run-all.sh vm1 vm node <master-ip-if-any>
 ```
 
-After the run, copy results back to your Mac:
+After completion:
 
 ```bash
 scp user@<vm-ip>:/tmp/benchmark-results/* ~/benchmark-results/vm1/
 ```
 
-Repeat for each VM.
+Repeat for all VMs.
 
 ---
 
-## Part 2: Container Performance Testing
+## 🚫 Part 2: Container Performance Testing
 
-### 1. Docker Environment Setup
+### 1. Docker Setup
 
-- Install Docker and Docker Compose on your Mac.
-- Use the provided `docker-compose.yml` to spin up containers.
-- Logs will be saved to a mounted host directory.
+- Install Docker and Docker Compose.
+- Launch test containers:
 
 ```bash
 docker-compose up -d
 ```
 
-### 2. Run Benchmarks Inside Containers
+### 2. Run Benchmarks in Containers
 
-Attach to a container:
+Attach and run:
 
 ```bash
 docker exec -it node1 bash
+./run-all.sh container1 container node <master-ip-if-any>
 ```
 
-Execute the script:
-
-```bash
-./run-all.sh container1 container node <master-ip-if-needed>
-```
-
-Results will be automatically saved to `./benchmark-results` on your Mac.
+Results are saved to `./benchmark-results` on your host via Docker volume.
 
 ---
 
-## Part 3: Host System Testing (Optional)
+## 💻 Part 3: Host System Testing (Optional)
 
-To test your Mac (host) with same resource limits:
+To simulate same VM/container resource limits:
 
 ```bash
 sudo systemd-run --scope -p CPUQuota=200% -p MemoryLimit=2G ./run-all.sh localhost host standalone
 ```
 
-Or use `cpulimit` if `systemd-run` is not available:
+If `systemd-run` is not available:
 
 ```bash
 cpulimit -l 200 -z ./run-all.sh localhost host standalone
 ```
 
-Logs will be saved in `~/benchmark-results`.
+Logs will be saved to `~/benchmark-results`.
 
 ---
 
-## Running All Benchmarks
+## 📊 Running All Benchmarks
 
-Use the `run-all.sh` script to automate all tests:
+Use the main runner:
 
 ```bash
-./run-all.sh <target-name> <mode> <role> [master-ip]
+./run-all.sh <target> <mode> <role> [master-ip]
 ```
 
 Examples:
@@ -117,67 +132,70 @@ Examples:
 ./run-all.sh localhost host standalone
 ```
 
-Each test will call individual scripts:
+Benchmarks include:
 
 - `cpu-benchmark.sh`
 - `mem-benchmark.sh`
 - `disk-benchmark.sh`
-- `network-benchmark.sh`
-- `hpc-benchmark.sh`
+- `net-benchmark.sh`
+- `hpl-benchmark.sh`
 
 ---
 
-## Log Collection
+## 📃 Log Collection
 
-All logs are saved under:
+All benchmark logs are stored under:
 
 ```bash
 ~/benchmark-results/
 ```
 
-VMs: use `scp` to collect logs.
-
-Containers: logs are mounted directly to `./benchmark-results` on your host.
-
----
-
-## Tools Used
-
-- `sysbench`: CPU and memory stress testing
-- `stress-ng`: Advanced stress testing
-- `iozone`: Disk I/O performance
-- `iperf3`: Network throughput testing
-- `hpcc`: HPC-style benchmarking (on VMs or containers with MPI)
+- VMs: use `scp` to collect logs.
+- Containers: logs are automatically mounted to host.
 
 ---
 
-## Plotting and Analysis
+## ⚖️ Tools Used
 
-1. Install Python and matplotlib:
+- `sysbench`: CPU and memory benchmarking
+- `stress-ng`: Stress testing CPU, memory
+- `iozone`: Disk I/O benchmarks
+- `iperf3`: Network throughput
+- `hpcc`: HPC-style floating point benchmarks
+
+---
+
+## 📊 Plotting & Analysis
+
+1. Install dependencies:
 
 ```bash
 pip install matplotlib pandas
 ```
 
-2. Use the provided script `plot-results.py` to generate plots:
+2. Run:
 
 ```bash
 python3 plot-results.py ~/benchmark-results/
 ```
 
-3. The script will parse logs and generate CPU, memory, disk, and network performance comparisons across:
+3. Generates CPU, memory, disk, and network comparison charts for:
 
 - VM
 - Container
 - Host
 
-4. Charts will be saved under `~/benchmark-results/plots/`
+Saved to:
+
+```bash
+~/benchmark-results/plots/
+```
 
 ---
 
-## Deliverables
+## 📄 Deliverables
 
-- Full logs in `~/benchmark-results/`
-- Summary plots in `~/benchmark-results/plots/`
-- Final report comparing performance across environments
-- Observations on virtualization overhead and efficiency
+- Raw logs in `~/benchmark-results/`
+- Visual plots in `~/benchmark-results/plots/`
+- Summary report comparing environments
+- Key insights into virtualization overhead and efficiency

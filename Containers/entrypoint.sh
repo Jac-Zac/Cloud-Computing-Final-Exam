@@ -35,3 +35,33 @@ chmod 600 /root/.ssh/*
 
 # SSHD runs in foreground, container stays up
 exec /usr/sbin/sshd -D
+
+--- TO REVIRW
+#!/bin/bash
+# entrypoint.sh - Docker container entrypoint script
+
+# Start SSH service
+/usr/sbin/sshd
+
+# Generate hostfile for MPI based on role
+if [ "$NODE_ROLE" = "master" ]; then
+    echo "🔧 Setting up master node..."
+    
+    # Create MPI hostfile with fixed IPs
+    echo "# Auto-generated MPI hostfile" > /benchmark/mpi-hostfile
+    echo "master slots=2" >> /benchmark/mpi-hostfile
+    echo "node-01 slots=2" >> /benchmark/mpi-hostfile
+    echo "node-02 slots=2" >> /benchmark/mpi-hostfile
+    
+    echo "✅ Master node setup complete."
+    echo "👉 To run benchmarks: docker exec -it master bash -c 'cd /benchmark && ./run-all.sh master container master'"
+    
+    # Keep container running
+    tail -f /dev/null
+else
+    echo "🔧 Setting up worker node..."
+    echo "✅ Worker node ready."
+    
+    # Keep container running
+    tail -f /dev/null
+fi

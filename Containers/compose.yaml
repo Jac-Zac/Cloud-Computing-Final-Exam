@@ -1,3 +1,5 @@
+version: "3"
+
 services:
   master:
     build: .
@@ -14,9 +16,13 @@ services:
       - NODE_ROLE=master
     volumes:
       - hpc-shared:/shared
+      - ./benchmark:/benchmark
+      - ./results/master:/tmp/benchmark-results
     networks:
-      - hpcnet
-    healthcheck: # check that SSH port 22 is open:contentReference[oaicite:6]{index=6}
+      hpcnet:
+        # Optional fixed IP for consistency
+        ipv4_address: 172.28.1.10
+    healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "22"]
       interval: 30s
       timeout: 10s
@@ -24,7 +30,7 @@ services:
 
   # Node configuration
   node-01:
-    # use same Dockerfile (Ubuntu + SSH) for worker
+    # use same Dockerfile for worker
     build: .
     deploy:
       resources:
@@ -36,8 +42,11 @@ services:
       - NODE_ROLE=worker
     volumes:
       - hpc-shared:/shared
+      - ./benchmark:/benchmark
+      - ./results/node-01:/tmp/benchmark-results
     networks:
-      - hpcnet
+      hpcnet:
+        ipv4_address: 172.28.1.11
     depends_on:
       # ensure master starts first (for ordering)
       - master
@@ -54,18 +63,24 @@ services:
       - NODE_ROLE=worker
     volumes:
       - hpc-shared:/shared
+      - ./benchmark:/benchmark
+      - ./results/node-02:/tmp/benchmark-results
     networks:
-      - hpcnet
+      hpcnet:
+        ipv4_address: 172.28.1.12
     depends_on:
       - master
 
 # named volume used by all nodes for shared directory
 volumes:
   hpc-shared:
+    # This creates a shared volume accessible by all containers
 
-# TODO: I belive this does the rule of the network adapter I have in VMs and also the dnsmasq assignment of IPs to talk to each other or something like that
-
-# user-defined bridge network (default type):contentReference[oaicite:7]{index=7}
+# Define a bridge network with fixed IP range for predictable addressing
 networks:
   hpcnet:
     driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.1.0/24
