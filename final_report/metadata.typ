@@ -5,8 +5,6 @@
   type : "final",
   //type : "draft",
   lang : "en",
-  //lang : "de",
-  //lang : "fr",
 )
 //-------------------------------------
 // Optional generate titlepage image
@@ -33,45 +31,46 @@
   url      : "https://synd.hevs.io",
   logos: (
     // tp_topleft  : image("resources/img/synd.svg", height: 1.2cm),
-    // tp_topright : image("resources/img/hei.svg", height: 1.5cm),
-    // tp_main     : titlepage_logo,
+    // tp_main : image("resources/img/hei.svg", height: 1.5cm),
+    // tp_main : image("resources/img/Cobranding_UniTS_MiGE_Bianco.png", height: 1.5cm),
+    tp_main     : titlepage_logo,
     // header      : image("resources/img/project-logo.svg", width: 2.5cm),
   ),
   authors: (
     (
       name        : "Jacopo Zacchigna",
-      // abbr        : "ZaS",
+      abbr        : "JZ",
       email       : "jacopo.zacchigna@studenti.units.it",
-      url         : "https://synd.hevs.io",
+      // url         : "https://synd.hevs.io",
     ),
-    (
-      name        : "Axel Amand",
-      abbr        : "AmA",
-      email       : "axel.amand@hevs.ch",
-      url         : "https://synd.hevs.io",
-    ),
-    (
-      name        : "Rémi Heredero",
-      abbr        : "HeR",
-      email       : "remi.heredero@hevs.ch",
-      url         : "https://synd.hevs.io",
-    ),
+    // (
+    //   name        : "Axel Amand",
+    //   abbr        : "AmA",
+    //   email       : "axel.amand@hevs.ch",
+    //   url         : "https://synd.hevs.io",
+    // ),
+    // (
+    //   name        : "Rémi Heredero",
+    //   abbr        : "HeR",
+    //   email       : "remi.heredero@hevs.ch",
+    //   url         : "https://synd.hevs.io",
+    // ),
   ),
   school: (
-    name        : "HES-SO Valais//Wallis",
-    major       : "Systems Engineering",
-    orientation : "Infotronics",
-    url         : "https://synd.hevs.io",
+    name        : "University Of Trieste",
+    major       : "Data Science and Artificial Intelligence ",
+    // orientation : "Infotronics",
+    // url         : "https://synd.hevs.io",
   ),
   course: (
-    name     : "Digital Design",
-    url      : "https://course.hevs.io/did/eda-docs/",
-    prof     : "Silvan Zahno",
-    class    : [S1f$alpha$],
-    semester : "Fall Semester 2025",
+    name     : "Cloud Computing",
+    url      : "https://github.com/Foundations-of-HPC/Cloud-basic-2024/tree/main",
+    prof     : "Giuliano Taffoni, Ruggero Lot, Stefano Alberto Russo",
+    // class    : [S1f$alpha$],
+    semester : "Fall Semester 2024/2025",
   ),
-  keywords : ("Typst", "Template", "Report", "HEI-Vs", "Systems Engineering", "Infotronics"),
-  version  : "v0.1.0",
+  // keywords : ("Typst", "Template", "Report", "HEI-Vs", "Systems Engineering", "Infotronics"),
+  // version  : "v0.1.0",
 )
 
 #let date= datetime.today()
@@ -81,9 +80,9 @@
 //
 #let tableof = (
   toc: true,
-  tof: false,
-  tot: false,
-  tol: false,
+  tof: true,
+  tot: true,
+  tol: true,
   toe: false,
   maxdepth: 3,
 )

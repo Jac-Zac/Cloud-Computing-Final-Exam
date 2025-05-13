@@ -15,15 +15,25 @@
   tableof: tableof,
 )
 
+// Increase font size
+#set text(size: 12pt)
+// Set links to be underlineeed
+#show link: underline
+// Change line spacing
+#set par(leading: 1em)
+// Keep other spacing more sensible
+#show par: set par(spacing: 1.5em)
+
 //-------------------------------------
 // Content
 //
 #include "/main/01-intro.typ"
-#include "/main/02-specification.typ"
-#include "/main/03-design.typ"
-#include "/main/04-implementation.typ"
-#include "/main/05-validation.typ"
+#include "/main/02-vm_setup.typ"
+#include "/main/03-containers_setup.typ"
+// #include "/main/04-implementation.typ"
+// #include "/main/05-validation.typ"
 #include "/main/06-conclusion.typ"
+#include "/main/to_know.typ"
 
 #heading(numbering:none, outlined: false)[] <sec:end>
 
