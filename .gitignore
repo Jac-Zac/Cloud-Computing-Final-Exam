@@ -1,15 +1,33 @@
+# macOS
 **/.DS_Store
-**/__pycache__
-**/*.out
-**/*.o
+
+# Python
+**/__pycache__/
+**/*.py[cod]
 **/*.ipynb_checkpoints/
+
+# R
 **/*.RData
 **/*.Rhistory
+
+# Archives and outputs
 **/*.gz
-**/*.txt
-**/.env
-**/.*svg
-**/.*png
-**/.*pdf
 **/*.zip
+**/*.out
+**/*.o
+
+# Env files
+**/.env
+
+# Text files (if needed)
+**/*.txt
+
+# Binary/image/media files
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.svg
+**/*.pdf
+
+# Project-specific files
 **/main
