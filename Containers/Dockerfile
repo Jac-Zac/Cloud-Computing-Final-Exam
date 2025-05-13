@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install essential packages
 RUN apt-get update && apt-get install -y \
     openssh-server \
+    sshpass \
     sudo \
     sysbench \
     iozone3 \
@@ -22,8 +23,8 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages for plotting
-RUN pip3 install matplotlib pandas
+# # Install Python packages for plotting
+# RUN pip3 install matplotlib pandas
 
 # Setup SSH
 RUN mkdir /var/run/sshd
