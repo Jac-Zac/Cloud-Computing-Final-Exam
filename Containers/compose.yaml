@@ -50,6 +50,7 @@ services:
     cpu_count: 2
     cpuset: "4,5"
     mem_limit: 2048MB
+    container_name: node-02
     environment:
       - NODE_ROLE=worker
     volumes:

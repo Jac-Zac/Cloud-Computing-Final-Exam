@@ -17,6 +17,12 @@ if [ "$NODE_ROLE" = "master" ]; then
     cp /root/.ssh/id_rsa.pub /shared/master.pub
     echo "Master public key written to /shared/master.pub"
 
+    # Copy performance tests to shared volume (if not already there)
+    if [ ! -d /shared/Performance_Testing ]; then
+        echo "Copying Performance_Testing to shared volume..."
+        cp -r /Performance_Testing /shared/
+    fi
+
 else
     # Wait until master's public key is available
     echo "Waiting for master's public key..."
@@ -44,10 +50,10 @@ if [ "$NODE_ROLE" = "master" ]; then
     echo "🔧 Setting up master node..."
     
     # Create MPI hostfile with fixed IPs
-    echo "# Auto-generated MPI hostfile" > /benchmark/configs/mpi-hostfile
-    echo "master slots=2" >> /benchmark/configs/mpi-hostfile
-    echo "node-01 slots=2" >> /benchmark/configs/mpi-hostfile
-    echo "node-02 slots=2" >> /benchmark/configs/mpi-hostfile
+    echo "# Auto-generated MPI hostfile" > /benchmark/mpi-hostfile
+    echo "master slots=2" >> /benchmark/mpi-hostfile
+    echo "node-01 slots=2" >> /benchmark/mpi-hostfile
+    echo "node-02 slots=2" >> /benchmark/mpi-hostfile
     
     echo "✅ Master node setup complete."
     echo "-> To run benchmarks: docker exec -it master bash -c 'cd /benchmark && ./run-all.sh master container master'"

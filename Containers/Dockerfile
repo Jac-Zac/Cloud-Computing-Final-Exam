@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     iozone3 \
     iperf3 \
     mpich \
+    hpcc \
     stress-ng \
     python3 \
     python3-pip \
@@ -23,9 +24,6 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# # Install Python packages for plotting
-# RUN pip3 install matplotlib pandas
-
 # Setup SSH
 RUN mkdir /var/run/sshd
 # Generate SSH host keys
@@ -35,6 +33,7 @@ RUN mkdir -p /root/.ssh
 RUN ssh-keygen -t rsa -f /root/.ssh/id_rsa -N ""
 RUN cat /root/.ssh/id_rsa.pub > /root/.ssh/authorized_keys
 RUN chmod 600 /root/.ssh/authorized_keys
+
 # Trust all hosts (for simplicity in test env)
 RUN echo "Host *\n\tStrictHostKeyChecking no\n\tUserKnownHostsFile /dev/null" > /root/.ssh/config
 
