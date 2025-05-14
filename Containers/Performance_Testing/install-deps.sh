@@ -17,7 +17,7 @@ if [[ "$(uname)" == "Darwin" ]]; then
     fi
     
     # Install macOS dependencies
-    brew install sysbench iozone iperf3 stress-ng
+    brew install sysbench iperf3 stress-ng
     brew install open-mpi
     echo "Note: HPCC may not be available on macOS via brew. MPI tests may be limited."
     
