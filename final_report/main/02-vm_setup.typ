@@ -5,43 +5,54 @@
 = Virtual Machine Cluster Setup
 
 What follows are the steps to set up and network the virtual machines on which we will later conduct performance tests. 
-For this, we setup I used VirtualBox. The tutorial referenced throughout this section was instrumental in guiding the process.
+For this, we setup VirtualBox. The tutorial #footnote()[https://github.com/Foundations-of-HPC/Cloud-basic-2024/blob/main/Tutorials/VirtualMachine/README.md] referenced throughout this section was instrumental in guiding the process.
 
 This modified guide walks through setting up a VM cluster for cloud environment testing, with I used to perform the test. 
 
 == Setting Up the Template VM
 
-1. Create a new virtual machine in VirtualBox by clicking on Machine > New.
+1. Create a new virtual machine in VirtualBox by clicking on _Machine > New_.
 2. Enter the template as the name for the VM, select the storage directory on the host, and choose the Ubuntu 24.04.1 amd64 server ISO image.
 3. Skip the unattended installation process, as it may cause issues.
-4. Configure hardware those are the settings I used: *2GB RAM and 2 CPU* (adjust based on host capabilities). 
+4. Configure hardware, the settings used in this case are: *2GB RAM and 2 CPU* (adjust based on host capabilities).
 5. Set the virtual hard disk size to 20GB.
 
 === Installing Ubuntu Server
 
-After configuring the VM:
-
-1. Start the VM and follow the installation wizard.
-2. Carefully select the language and keyboard layout
-3. Choose the standard Ubuntu Server installation
-4. Leave the network configuration at its default for now; we will adjust this later.
-5. Leave the proxy address blank.
-6. Select a suitable mirror address; the installer will test options.
-7. For storage, use the "entire disk" option and enable LVM group setup.
-8. Set up the user profile (e.g., username: user01, server name: template).
-9. Skip Ubuntu Pro registration.
-10. Enable the OpenSSH server for remote access.
-11. Skip additional suggested packages.
-12. Complete the installation, then shut down the VM and remove the ISO image.
+After configuring the Virtual Machine, start it and follow the installation wizard.
+1. Carefully select the language and keyboard layout
+2. Choose the standard Ubuntu Server installation
+3. Leave the network configuration at its default for now; we will adjust this later.
+4. Leave the proxy address blank.
+5. Select a suitable mirror address; the installer will test options.
+6. For storage, use the "entire disk" option and enable _LVM group_ setup.
+7. Set up the user profile (e.g., username: user01, server name: template).
+8. Skip Ubuntu Pro registration.
+9. Enable the OpenSSH server for remote access.
+10. Skip additional suggested packages.
+11. Complete the installation, then shut down the VM and remove the ISO image.
 
 === Configuring the Template
 
-I then started the machine created earlier and logged in with the credentials `username: user01` and `password: test` which I had previously setted up. Then tested network connectivity was working correctly.
-Then I updated the software:
+Firstly, start the machine created earlier and log in with the credentials `username: user01` and `password: test` which were set up previously. Then test if the network connectivity is working correctly.
+Next update the software using the following command:
 
 ```bash
 sudo apt update && sudo apt upgrade
 ```
+
+It is important to install two additional packages, this can be done with this command:
+
+```bash
+sudo apt install net-tools gcc make
+```
+
+Finally, we have to shutdown the node with the following command: 
+
+```bash
+sudo shutdown -h now
+```
+
 
 === Configure VirtualBox Internal Network
 
@@ -56,7 +67,7 @@ Upper Bound: 192.168.56.199
 == Configuring the entire cluster (with automated script)
 
 Due to many inconveniences and problems in the process of setting up the machines and for ease of use in the future, I have created a script to create the cluster.
-It can be found in the repository @git_repo was created.
+It can be found in the git repository #footnote()[https://github.com/Jac-Zac/Cloud-Computing-Final-Exam].
 
 The `setup_node.sh` script automates the VM setup process for both master and worker nodes. It handles VM cloning, network configuration, SSH setup, and service configuration.
 
@@ -68,7 +79,7 @@ The `setup_node.sh` script automates the VM setup process for both master and wo
 #infobox()[
   - `master_config/` — Contains configuration files for master node
   - `node_config/` — Contains generic configuration for worker nodes
-Those configuration can also be found inside the GitHub directory with all of the other configurations and scripts.
+Those configuration can also be found inside the GitHub directory with all the other configurations and scripts.
 ]
 
 == Basic Usage
@@ -224,7 +235,7 @@ sudo systemctl enable dnsmasq
 sudo reboot
 ```
 
-#warningbox()[Afther bootstrap may happen the dnsmasq service start before the interfaces, just restart the service (the problem can be fixed with some configuration).
+#warningbox()[After bootstrap may happen the dnsmasq service start before the interfaces, just restart the service (the problem can be fixed with some configuration).
 
 ```bash
 sudo systemctl restart dnsmasq systemd-resolved

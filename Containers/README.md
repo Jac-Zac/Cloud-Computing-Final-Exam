@@ -40,6 +40,9 @@ chmod +x entrypoint.sh
 docker-compose -f compose.yaml up --build
 ```
 
+Each node has a limit of 2 CPU cores. However, on macOS, core pinning for Docker containers using the `--cpuset-cpus` option is not effective because Docker Desktop for Mac runs containers inside a lightweight VM, which abstracts the host CPU cores.
+As a result, pinning containers to specific cores does not actually restrict CPU usage to those cores on a Mac
+
 This starts three containers:
 
 - `master`: Master node: which can ssh in other machines

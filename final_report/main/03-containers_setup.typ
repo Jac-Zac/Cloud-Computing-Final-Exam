@@ -47,6 +47,11 @@ chmod +x entrypoint.sh
 
 3. Build and Start the Cluster through the use of Docker Compose
 
+
+#infobox()[
+Each node has a limit of 2 CPU cores. However, on macOS, core pinning for Docker containers using the `--cpuset-cpus` option is not effective.
+]
+
 ```bash
 docker-compose -f compose.yaml up --build
 ```
