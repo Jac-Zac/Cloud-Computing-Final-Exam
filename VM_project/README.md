@@ -7,6 +7,7 @@ This guide walks through setting up a VM cluster for cloud environment testing, 
 The `setup_node.sh` script automates the VM setup process for both master and worker nodes. It handles VM cloning, network configuration, SSH setup, and service configuration.
 
 ### Prerequisites
+
 - VirtualBox installed
 - A template VM named "template" already created
 - Configuration directories:
@@ -20,8 +21,8 @@ The `setup_node.sh` script automates the VM setup process for both master and wo
 ./setup_node.sh master
 
 # Set up worker nodes (using different SSH ports)
-./setup_node.sh node-02 4022
-./setup_node.sh node-03 5022
+./setup_node.sh node-01 4022
+./setup_node.sh node-02 5022
 ```
 
 ### Advanced Usage
@@ -33,25 +34,30 @@ You can specify the node name, SSH port, and password:
 ```
 
 For example:
+
 ```bash
-./setup_node.sh node-02 4022 custom_password
+./setup_node.sh node-01 4022 custom_password
 ```
 
 ### Access Pattern
+
 - **Master Node**: Direct SSH access from your local machine
 - **Worker Nodes**: SSH access only through the master node
 
 Connect to the master node first:
+
 ```bash
 ssh -i ~/.ssh/id_ed25519 -p 3022 user01@127.0.0.1
 ```
 
 Then from master, connect to worker nodes:
+
 ```bash
 ssh node-0n
 ```
 
 ## Table of Contents
+
 - [Initial Template Setup](#initial-template-setup)
 - [Cloning VMs](#cloning-vms)
 - [Network Configuration](#network-configuration)
@@ -64,6 +70,7 @@ ssh node-0n
 # Initial Template Setup
 
 ### Create Base Template VM
+
 1. Download and install [ARM version of Ubuntu Server](https://ubuntu.com/download/server/arm)
 2. Use unattended installation with these credentials:
    - Username: `user01`
@@ -72,6 +79,7 @@ ssh node-0n
 ### Configure VirtualBox Internal Network
 
 Create a Host-Only network named "CloudBasicNet" with:
+
 ```
 Mask: 255.255.255.0
 Lower Bound: 192.168.56.2
@@ -84,7 +92,7 @@ Clone the template VM to create your cluster:
 
 ```bash
 VBoxManage clonevm "template" --name "master" --register --mode all
-VBoxManage clonevm "template" --name "node-02" --register --mode all
+VBoxManage clonevm "template" --name "node-01" --register --mode all
 ```
 
 > [!TIP]
@@ -104,7 +112,7 @@ VBoxManage modifyvm "VM_NAME" --nic2 intnet
 VBoxManage modifyvm "VM_NAME" --intnet2 "CloudBasicNet"
 ```
 
-Replace `VM_NAME` with "master", "node-02", etc. for each machine.
+Replace `VM_NAME` with "master", "node-01", etc. for each machine.
 
 ### Enable SSH Port Forwarding
 
@@ -115,7 +123,7 @@ Configure port forwarding to access VMs via SSH:
 VBoxManage modifyvm "master" --natpf1 "ssh,tcp,127.0.0.1,3022,,22"
 
 # For worker node 1 (accessible on localhost:4022)
-VBoxManage modifyvm "node-02" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
+VBoxManage modifyvm "node-01" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
 
 # Add similar rules for other nodes as needed
 ```
@@ -125,6 +133,7 @@ VBoxManage modifyvm "node-02" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
 # Master Node Configuration
 
 > [!TIP]
+>
 > ```bash
 > # Start VM in headless mode
 > VBoxManage startvm "VM_NAME" --type headless
@@ -135,11 +144,13 @@ VBoxManage modifyvm "node-02" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
 ### SSH Key Setup
 
 1. Copy your SSH public key to the master node:
+
    ```bash
    scp -P 3022 ~/.ssh/id_ed25519.pub user01@127.0.0.1:~
    ```
 
 2. SSH into the master node:
+
    ```bash
    ssh -p 3022 user01@127.0.0.1
    ```
@@ -159,12 +170,14 @@ VBoxManage modifyvm "node-02" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
 ### Copy Configuration Files
 
 Transfer configuration files to the master node:
+
 ```bash
 scp -P 3022 -r master_config user01@127.0.0.1:~
 ```
 
 > [!TIP]
 > To copy files from the VM to your host machine, reverse the source and destination:
+>
 > ```bash
 > scp -P 3022 user01@127.0.0.1:~/config_file ./local_directory/
 > ```
@@ -178,13 +191,16 @@ ssh-keygen
 ## Network Configuration
 
 ### Base Network Setup
+
 1. Apply the network configuration:
+
    ```bash
    sudo cp ~/master_config/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml
    sudo netplan apply
    ```
 
 2. Set the hostname:
+
    ```bash
    echo "master" | sudo tee /etc/hostname > /dev/null
    sudo hostnamectl set-hostname master  # Ensure hostname is set immediately
@@ -194,6 +210,7 @@ ssh-keygen
    > Verify hostname changes with: `hostname`
 
 3. Update hosts file:
+   > The hosts file is configure to assign names like the ones in the Containers
    ```bash
    sudo cp ~/master_config/hosts /etc/hosts
    ```
@@ -201,6 +218,7 @@ ssh-keygen
 ### DNS and DHCP Configuration
 
 1. Install DNSmasq:
+
    ```bash
    sudo apt update
    sudo apt install dnsmasq -y
@@ -210,23 +228,25 @@ ssh-keygen
    > Check installation status with: `systemctl status dnsmasq`
 
 2. Configure DNSmasq:
+
    ```bash
    sudo cp ~/master_config/dnsmasq.conf /etc/dnsmasq.conf
    sudo mkdir -p /etc/dnsmasq.d  # Create directory for additional configurations
    ```
 
 3. Configure DNS resolution:
+
    ```bash
    # Backup original resolv.conf
    sudo cp /etc/resolv.conf /etc/resolv.conf.backup
-   
+
    # Remove existing symlink if present
    sudo unlink /etc/resolv.conf
-   
+
    # Set up new configuration
    sudo cp ~/master_config/resolv.conf /etc/resolv.conf
    sudo ln -s /run/systemd/resolve/resolv.conf /etc/resolv.dnsmasq
-   
+
    # Restart relevant services
    sudo systemctl restart dnsmasq
    sudo systemctl restart systemd-resolved
@@ -236,11 +256,13 @@ ssh-keygen
    > Test DNS resolution with: `nslookup google.com` or `ping -c 3 master`
 
 4. Enable DNSmasq on startup:
+
    ```bash
    sudo systemctl enable dnsmasq
    ```
 
 5. Apply changes:
+
    ```bash
    sudo reboot
    # Wait for system to reboot before proceeding to next steps
@@ -252,12 +274,14 @@ ssh-keygen
 ### NFS Server Setup
 
 1. Install NFS server:
+
    ```bash
    sudo apt update
    sudo apt install nfs-kernel-server -y
    ```
 
 2. Create shared directory:
+
    ```bash
    sudo mkdir -p /shared
    sudo chmod 777 /shared  # Set appropriate permissions
@@ -267,6 +291,7 @@ ssh-keygen
    > For production environments, use more restrictive permissions: `sudo chmod 755 /shared`
 
 3. Configure NFS exports:
+
    ```bash
    # Add export configuration without overriding existing comments
    echo '/shared/ 192.168.56.0/255.255.255.0(rw,sync,no_root_squash,no_subtree_check)' | sudo tee -a /etc/exports > /dev/null
@@ -276,6 +301,7 @@ ssh-keygen
    > View current exports with: `cat /etc/exports`
 
 4. Enable and restart the NFS server:
+
    ```bash
    sudo systemctl enable nfs-kernel-server
    sudo systemctl restart nfs-kernel-server
@@ -296,9 +322,10 @@ ssh-keygen
 # Worker Node Configuration
 
 > [!TIP]
+>
 > ```bash
 > # Access worker nodes from master
-> ssh user01@node-02
+> ssh user01@node-01
 > ```
 
 ## Initial Setup
@@ -306,13 +333,15 @@ ssh-keygen
 ### Copy Configuration Files
 
 1. Copy node configuration from master to local machine:
+
    ```bash
-   scp -P 3022 user01@127.0.0.1:~/node_config ./node_config 
+   scp -P 3022 user01@127.0.0.1:~/node_config ./node_config
    ```
 
 2. SSH into the worker node:
+
    ```bash
-   ssh user01@node-02
+   ssh user01@node-01
    ```
 
    > [!TIP]
@@ -323,6 +352,7 @@ ssh-keygen
 ### Configure Network Adapter
 
 1. Apply the network configuration:
+
    ```bash
    sudo cp ~/node_config/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml
    sudo netplan apply
@@ -332,6 +362,7 @@ ssh-keygen
    > Verify network configuration with: `ip addr show`
 
 2. Reset the hostname:
+
    ```bash
    echo "" | sudo tee /etc/hostname > /dev/null
    ```
@@ -340,12 +371,14 @@ ssh-keygen
    > The hostname will be assigned by DHCP from the master node
 
 3. Configure DNS resolution:
+
    ```bash
    sudo unlink /etc/resolv.conf
    sudo cp ~/node_config/resolv.conf /etc/resolv.conf
    ```
 
 4. Apply changes:
+
    ```bash
    sudo reboot
    ```
@@ -358,12 +391,14 @@ ssh-keygen
 ### Install and Configure NFS Client
 
 1. Install NFS client packages:
+
    ```bash
    sudo apt update
    sudo apt install nfs-common -y
    ```
 
 2. Create mount points:
+
    ```bash
    sudo mkdir -p /shared/data /shared/home
    ```
@@ -374,11 +409,13 @@ ssh-keygen
 ### Configure AutoFS for Automatic Mounting
 
 1. Install AutoFS:
+
    ```bash
    sudo apt -y install autofs
    ```
 
 2. Configure auto mount:
+
    ```bash
    # Enable the direct mounting point to the master
    echo '/-      /etc/auto.shared' | sudo tee -a /etc/auto.master > /dev/null
@@ -390,6 +427,7 @@ ssh-keygen
    > You can add more mount points by adding additional entries to the auto.mount file
 
 3. Restart AutoFS service:
+
    ```bash
    sudo systemctl enable autofs
    sudo systemctl restart autofs
@@ -401,15 +439,17 @@ ssh-keygen
 ## Verification and Testing
 
 1. Test NFS access:
+
    ```bash
-   touch /shared/data/test-from-node-02
+   touch /shared/data/test-from-node-01
    ls -la /shared/data/
    ```
 
 2. Test network connectivity:
+
    ```bash
    ping -c 3 master
-   ping -c 3 node-02  # If you have other nodes
+   ping -c 3 node-01  # If you have other nodes
    ```
 
    > [!TIP]
@@ -430,12 +470,14 @@ ssh-keygen
 For password-less access between nodes:
 
 1. From the master node, copy SSH keys to worker nodes:
+
    ```bash
+   ssh-copy-id user01@node-01
    ssh-copy-id user01@node-02
-   ssh-copy-id user01@node-03
    ```
 
 2. From worker nodes, copy SSH keys to master:
+
    ```bash
    ssh-keygen  # If not already done
    ssh-copy-id user01@master

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Default number of nodes
-n=${1:-9}
+n=${1:-4}
 
 # Build the node list
 nodes=(master)

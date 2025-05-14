@@ -60,7 +60,7 @@ The master generates an SSH key and shares it with workers via a Docker-managed 
 
 On the `master` node:
 
-- A hostfile is created at `/benchmark/mpi-hostfile` with fixed IP aliases.
+- A hostfile is created at `/benchmark/configs/mpi-hostfile` with fixed IP aliases.
 - Format:
 
   ```
