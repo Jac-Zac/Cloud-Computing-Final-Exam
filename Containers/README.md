@@ -1,164 +1,121 @@
-# Cloud Computing Benchmark Suite
+# HPC Docker Cluster Setup
 
-This benchmark suite provides tools to compare performance between virtual machines (VMs), containers, and host systems, with special attention to distributed workloads and shared filesystems.
+This project sets up a lightweight HPC-like environment using Docker containers, with one **master** and two **worker nodes**. It enables SSH communication and MPI benchmark execution using a shared volume and predefined IP addresses.
 
-## Overview
+---
 
-The benchmark suite tests:
+## 📁 Project Structure
 
-- CPU performance
-- Memory performance
-- Disk I/O (local and shared filesystems)
-- Network performance
-- HPC workloads (using MPI)
+```
+.
+├── Dockerfile
+├── compose.yaml
+├── entrypoint.sh
+├── benchmark/
+├── results/
+│   ├── master/
+│   ├── node-01/
+│   └── node-02/
+└── shared/ (Docker-managed volume)
+```
 
-## Setup Instructions
+## 🚀 Getting Started
 
-### Prerequisites
-
-- For VMs: VirtualBox, VMware, or similar virtualization software
-- For containers: Docker and Docker Compose
-- For host testing: MacOS (M4 chip) with homebrew
-
-### Installation
-
-#### On macOS Host:
+### 1. Clone the repository
 
 ```bash
-# Install dependencies
-brew install sysbench stress-ng iozone iperf3
-brew install open-mpi  # For HPC testing
-brew install python matplotlib pandas  # For results analysis
+git clone <your-repo-url>
+cd <repo-directory>
 ```
 
-#### For VMs/Containers:
-
-The benchmark scripts will automatically install dependencies using:
+### 2. Make `entrypoint.sh` executable
 
 ```bash
-./install-deps.sh
+chmod +x entrypoint.sh
 ```
 
-## Directory Structure
-
-```
-benchmark-suite/
-├── scripts/
-│   ├── cpu-benchmark.sh
-│   ├── mem-benchmark.sh
-│   ├── disk-benchmark.sh
-│   ├── net-benchmark.sh
-│   ├── hpl-benchmark.sh
-│   ├── common.sh
-│   ├── install-deps.sh
-│   ├── run-all.sh
-│   └── collect-results.sh  # New script to gather results
-├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
-├── config/
-│   └── mpi-hostfile.template
-└── results/
-    └── plots/
-```
-
-## Running Benchmarks
-
-### 1. Virtual Machine Testing
-
-Set up 2-3 VMs with 2 vCPUs, 2GB RAM each. Ensure they can communicate via network.
-
-On the master VM:
+### 3. Build and Start the Cluster
 
 ```bash
-./run-all.sh vm1 vm master
+docker-compose -f compose.yaml up --build
 ```
 
-On each worker VM:
+This starts three containers:
+
+- `master`: Master node: which can ssh in other machines
+- `node-01`: Worker node
+- `node-02`: Worker node
+
+The master generates an SSH key and shares it with workers via a Docker-managed volume `hpc-shared`.
+
+## 🔐 SSH Communication
+
+> Following a similar structure to what has been done in VMS
+
+- The master node generates a root SSH keypair if not already present.
+- Workers wait until the master's public key is available, then append it to their `authorized_keys`.
+- SSH daemon is started in each container.
+
+## 🖥️ MPI Hostfile Generation
+
+On the `master` node:
+
+- A hostfile is created at `/benchmark/mpi-hostfile` with fixed IP aliases.
+- Format:
+
+  ```
+  # Auto-generated MPI hostfile
+  master slots=2
+  node-01 slots=2
+  node-02 slots=2
+  ```
+
+## 📊 Running Benchmarks
+
+Once all containers are up, run benchmarks from the master node:
 
 ```bash
-./run-all.sh vm2 vm node master-ip-address
-```
-
-### 2. Container Testing
-
-Using the provided `docker-compose.yml`:
-
-```bash
-# Start the containers
-docker-compose up -d
-
-# Run benchmarks on master
 docker exec -it master bash
 cd /benchmark
-./run-all.sh container-master container master
-
-# Run benchmarks on nodes
-docker exec -it node-01 bash
-cd /benchmark
-./run-all.sh container-node1 container node master
-
-# Repeat for other nodes
+./run-all.sh master container master
 ```
 
-### 3. Host Testing
+Ensure `run-all.sh` exists and is executable.
+
+## 🛑 Stopping the Cluster
 
 ```bash
-# On Mac M4 with resource limits
-cpulimit -l 200 ./run-all.sh localhost host standalone
+docker-compose down
 ```
 
-## Shared Filesystem Testing
-
-The suite automatically detects NFS/shared filesystems during disk benchmarks. If using the `/shared` mount point:
+To clean up all volumes (removes results and shared SSH files):
 
 ```bash
-# Run specific test on shared filesystem
-./disk-benchmark.sh target mode role master-ip /shared
+docker-compose down -v
 ```
 
-## Collecting Results
+---
 
-After running benchmarks on all systems, use the collection script:
+## 🛠️ Notes
 
-```bash
-./collect-results.sh output_directory
-```
+- Ensure ports (like SSH) are not blocked by local firewalls.
+- Use the fixed IPs or container names to connect between nodes.
+- Check logs with:
 
-This will:
+  ```bash
+  docker logs master
+  docker logs node-01
+  docker logs node-02
+  ```
 
-1. Gather results from all VMs via SSH (configure in script)
-2. Copy results from Docker containers
-3. Include host results
-4. Generate comparison plots
+## ✅ Health Check
 
-## Docker Compose Configuration
+- The `master` container includes a health check to confirm that the SSH service is running:
 
-The provided `docker-compose.yml` correctly:
-
-- Limits each container to 2 CPUs and 2GB RAM
-- Sets up a shared volume (`hpc-shared`) mounted at `/shared`
-- Creates a bridge network for inter-container communication
-- Designates container roles (master/worker)
-
-## Understanding the Results
-
-Results are organized by:
-
-- Environment type (VM/container/host)
-- Node name
-- Benchmark type
-
-Plots show comparisons between different environments for each metric, helping identify performance differences between virtualization methods.
-
-## Customization
-
-- Edit `common.sh` to adjust log directories and common functions
-- Modify individual benchmark scripts to change test parameters
-- Update `docker-compose.yml` to adjust container resources
-
-## Troubleshooting
-
-- If MPI tests fail, check that hostfiles are correctly generated
-- For network tests, verify firewall rules allow iperf3 traffic
-- For shared filesystem tests, ensure mount points exist and have correct permissions
+  ```yaml
+  healthcheck:
+    test: ["CMD", "nc", "-z", "localhost", "22"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+  ```

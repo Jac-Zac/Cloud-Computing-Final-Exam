@@ -1,201 +1,164 @@
-# ☁️ Cloud Computing Performance Testing Guide
+# Cloud Computing Benchmark Suite
 
-This guide provides a comprehensive implementation plan for benchmarking and comparing performance across **virtual machines (VMs)**, **containers**, and the **host system**. It automates CPU, memory, disk, network, and HPC-style testing using open-source tools.
+This benchmark suite provides tools to compare performance between virtual machines (VMs), containers, and host systems, with special attention to distributed workloads and shared filesystems.
 
----
+## Overview
 
-## 📆 Project Structure
+The benchmark suite tests:
 
-```
-.
-├── bin/
-│   ├── common.sh
-│   ├── cpu-benchmark.sh
-│   ├── disk-benchmark.sh
-│   ├── mem-benchmark.sh
-│   ├── net-benchmark.sh
-│   └── hpl-benchmark.sh
-├── run-all.sh
-├── install-deps.sh
-├── docker-compose.yml
-└── README.md
-```
+- CPU performance
+- Memory performance
+- Disk I/O (local and shared filesystems)
+- Network performance
+- HPC workloads (using MPI)
 
----
+## Setup Instructions
 
-## 🚀 Part 1: VM Performance Testing
+### Prerequisites
 
-### 1. Environment Setup
+- For VMs: VirtualBox, VMware, or similar virtualization software
+- For containers: Docker and Docker Compose
+- For host testing: MacOS (M4 chip) with homebrew
 
-- Create 2-3 Ubuntu virtual machines (e.g., via VirtualBox or cloud provider).
-- Allocate 2 vCPUs and 2GB RAM per VM.
-- Use a bridged or host-only adapter to ensure network connectivity.
-- Set up passwordless SSH or prepare to use `scp` for file transfers.
+### Installation
 
-### 2. Install Benchmark Dependencies
-
-On each VM:
+#### On macOS Host:
 
 ```bash
-sudo apt update && sudo apt install -y sysbench stress-ng iozone3 iperf3 hpcc
+# Install dependencies
+brew install sysbench stress-ng iozone iperf3
+brew install open-mpi  # For HPC testing
+brew install python matplotlib pandas  # For results analysis
 ```
 
-Or use:
+#### For VMs/Containers:
+
+The benchmark scripts will automatically install dependencies using:
 
 ```bash
 ./install-deps.sh
 ```
 
-### 3. Copy Benchmark Scripts
+## Directory Structure
 
-From your host:
-
-```bash
-scp -r ./cloud-benchmark user@<vm-ip>:/home/user/
-chmod +x /home/user/cloud-benchmark/bin/*.sh
+```
+benchmark-suite/
+├── scripts/
+│   ├── cpu-benchmark.sh
+│   ├── mem-benchmark.sh
+│   ├── disk-benchmark.sh
+│   ├── net-benchmark.sh
+│   ├── hpl-benchmark.sh
+│   ├── common.sh
+│   ├── install-deps.sh
+│   ├── run-all.sh
+│   └── collect-results.sh  # New script to gather results
+├── docker/
+│   ├── Dockerfile
+│   └── docker-compose.yml
+├── config/
+│   └── mpi-hostfile.template
+└── results/
+    └── plots/
 ```
 
-### 4. Run Benchmarks
+## Running Benchmarks
 
-SSH into each VM:
+### 1. Virtual Machine Testing
 
-```bash
-cd cloud-benchmark
-./run-all.sh vm1 vm node <master-ip-if-any>
-```
+Set up 2-3 VMs with 2 vCPUs, 2GB RAM each. Ensure they can communicate via network.
 
-After completion:
-
-```bash
-scp user@<vm-ip>:/tmp/benchmark-results/* ~/benchmark-results/vm1/
-```
-
-Repeat for all VMs.
-
----
-
-## 🚫 Part 2: Container Performance Testing
-
-### 1. Docker Setup
-
-- Install Docker and Docker Compose.
-- Launch test containers:
-
-```bash
-docker-compose up -d
-```
-
-### 2. Run Benchmarks in Containers
-
-Attach and run:
-
-```bash
-docker exec -it node1 bash
-./run-all.sh container1 container node <master-ip-if-any>
-```
-
-Results are saved to `./benchmark-results` on your host via Docker volume.
-
----
-
-## 💻 Part 3: Host System Testing (Optional)
-
-To simulate same VM/container resource limits:
-
-```bash
-sudo systemd-run --scope -p CPUQuota=200% -p MemoryLimit=2G ./run-all.sh localhost host standalone
-```
-
-If `systemd-run` is not available:
-
-```bash
-cpulimit -l 200 -z ./run-all.sh localhost host standalone
-```
-
-Logs will be saved to `~/benchmark-results`.
-
----
-
-## 📊 Running All Benchmarks
-
-Use the main runner:
-
-```bash
-./run-all.sh <target> <mode> <role> [master-ip]
-```
-
-Examples:
+On the master VM:
 
 ```bash
 ./run-all.sh vm1 vm master
-./run-all.sh container1 container node 172.28.1.10
-./run-all.sh localhost host standalone
 ```
 
-Benchmarks include:
-
-- `cpu-benchmark.sh`
-- `mem-benchmark.sh`
-- `disk-benchmark.sh`
-- `net-benchmark.sh`
-- `hpl-benchmark.sh`
-
----
-
-## 📃 Log Collection
-
-All benchmark logs are stored under:
+On each worker VM:
 
 ```bash
-~/benchmark-results/
+./run-all.sh vm2 vm node master-ip-address
 ```
 
-- VMs: use `scp` to collect logs.
-- Containers: logs are automatically mounted to host.
+### 2. Container Testing
 
----
-
-## ⚖️ Tools Used
-
-- `sysbench`: CPU and memory benchmarking
-- `stress-ng`: Stress testing CPU, memory
-- `iozone`: Disk I/O benchmarks
-- `iperf3`: Network throughput
-- `hpcc`: HPC-style floating point benchmarks
-
----
-
-## 📊 Plotting & Analysis
-
-1. Install dependencies:
+Using the provided `docker-compose.yml`:
 
 ```bash
-pip install matplotlib pandas
+# Start the containers
+docker-compose up -d
+
+# Run benchmarks on master
+docker exec -it master bash
+cd /benchmark
+./run-all.sh container-master container master
+
+# Run benchmarks on nodes
+docker exec -it node-01 bash
+cd /benchmark
+./run-all.sh container-node1 container node master
+
+# Repeat for other nodes
 ```
 
-2. Run:
+### 3. Host Testing
 
 ```bash
-python3 plot-results.py ~/benchmark-results/
+# On Mac M4 with resource limits
+cpulimit -l 200 ./run-all.sh localhost host standalone
 ```
 
-3. Generates CPU, memory, disk, and network comparison charts for:
+## Shared Filesystem Testing
 
-- VM
-- Container
-- Host
-
-Saved to:
+The suite automatically detects NFS/shared filesystems during disk benchmarks. If using the `/shared` mount point:
 
 ```bash
-~/benchmark-results/plots/
+# Run specific test on shared filesystem
+./disk-benchmark.sh target mode role master-ip /shared
 ```
 
----
+## Collecting Results
 
-## 📄 Deliverables
+After running benchmarks on all systems, use the collection script:
 
-- Raw logs in `~/benchmark-results/`
-- Visual plots in `~/benchmark-results/plots/`
-- Summary report comparing environments
-- Key insights into virtualization overhead and efficiency
+```bash
+./collect-results.sh output_directory
+```
+
+This will:
+
+1. Gather results from all VMs via SSH (configure in script)
+2. Copy results from Docker containers
+3. Include host results
+4. Generate comparison plots
+
+## Docker Compose Configuration
+
+The provided `docker-compose.yml` correctly:
+
+- Limits each container to 2 CPUs and 2GB RAM
+- Sets up a shared volume (`hpc-shared`) mounted at `/shared`
+- Creates a bridge network for inter-container communication
+- Designates container roles (master/worker)
+
+## Understanding the Results
+
+Results are organized by:
+
+- Environment type (VM/container/host)
+- Node name
+- Benchmark type
+
+Plots show comparisons between different environments for each metric, helping identify performance differences between virtualization methods.
+
+## Customization
+
+- Edit `common.sh` to adjust log directories and common functions
+- Modify individual benchmark scripts to change test parameters
+- Update `docker-compose.yml` to adjust container resources
+
+## Troubleshooting
+
+- If MPI tests fail, check that hostfiles are correctly generated
+- For network tests, verify firewall rules allow iperf3 traffic
+- For shared filesystem tests, ensure mount points exist and have correct permissions
