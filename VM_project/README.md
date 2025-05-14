@@ -9,6 +9,7 @@ The `setup_node.sh` script automates the VM setup process for both master and wo
 ### Prerequisites
 
 - VirtualBox installed
+- [`sshpass`](https://sourceforge.net/projects/sshpass/) installed to avoid interactive password prompt
 - A template VM named "template" already created
 - Configuration directories:
   - `master_config/` - Contains configuration files for master node
@@ -210,7 +211,7 @@ ssh-keygen
    > Verify hostname changes with: `hostname`
 
 3. Update hosts file:
-   > The hosts file is configure to assign names like the ones in the Containers
+
    ```bash
    sudo cp ~/master_config/hosts /etc/hosts
    ```
