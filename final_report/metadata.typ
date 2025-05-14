@@ -49,18 +49,10 @@
     //   email       : "axel.amand@hevs.ch",
     //   url         : "https://synd.hevs.io",
     // ),
-    // (
-    //   name        : "Rémi Heredero",
-    //   abbr        : "HeR",
-    //   email       : "remi.heredero@hevs.ch",
-    //   url         : "https://synd.hevs.io",
-    // ),
   ),
   school: (
     name        : "University Of Trieste",
     major       : "Data Science and Artificial Intelligence ",
-    // orientation : "Infotronics",
-    // url         : "https://synd.hevs.io",
   ),
   course: (
     name     : "Cloud Computing",

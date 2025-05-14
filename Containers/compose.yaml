@@ -5,6 +5,8 @@ services:
     cpu_count: 2
     # Set memory limit
     mem_limit: 2048MB
+    # From what I have seen the performance cors are the first
+    # Thus the first 8 cores in my computer are performance core
     cpuset: "0,1" # Set to only cpu 0 and 1
     container_name: master
     environment:
@@ -12,7 +14,6 @@ services:
       - NODE_ROLE=master
     volumes:
       - hpc-shared:/shared
-      - ./benchmark:/benchmark
       - ./results/master:/tmp/benchmark-results
     networks:
       hpcnet:
@@ -36,7 +37,6 @@ services:
       - NODE_ROLE=worker
     volumes:
       - hpc-shared:/shared
-      - ./benchmark:/benchmark
       - ./results/node-01:/tmp/benchmark-results
     networks:
       hpcnet:
@@ -54,7 +54,6 @@ services:
       - NODE_ROLE=worker
     volumes:
       - hpc-shared:/shared
-      - ./benchmark:/benchmark
       - ./results/node-02:/tmp/benchmark-results
     networks:
       hpcnet:

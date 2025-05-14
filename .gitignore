@@ -28,6 +28,3 @@
 **/*.jpeg
 **/*.svg
 **/*.pdf
-
-# Project-specific files
-**/main
