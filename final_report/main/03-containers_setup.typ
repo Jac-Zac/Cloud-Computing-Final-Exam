@@ -86,6 +86,13 @@ cd /benchmark
 ./run-all.sh master container master
 ```
 
+#infobox()[ 
+  We can get stats on our containers by running:
+  ```bash
+  docker stats 
+  ```
+]
+
 At this point it is important to ensure that the benchmark script `run-all.sh` exists and is executable.
 
 

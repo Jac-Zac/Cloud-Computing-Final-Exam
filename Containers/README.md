@@ -82,6 +82,14 @@ cd /benchmark
 
 Ensure `run-all.sh` exists and is executable.
 
+### Docker stats
+
+We can see docker stats by running the following command:
+
+```bash
+docker stats
+```
+
 ## 🛑 Stopping the Cluster
 
 ```bash
