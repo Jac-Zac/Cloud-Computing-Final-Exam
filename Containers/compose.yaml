@@ -2,7 +2,7 @@ services:
   master:
     build: .
     # Set cpu limit
-    cpu_count: 2
+    cpus: 2
     # Set memory limit
     mem_limit: 2048MB
     # From what I have seen the performance cors are the first
@@ -29,7 +29,7 @@ services:
   node-01:
     # use same Dockerfile for worker
     build: .
-    cpu_count: 2
+    cpus: 2
     cpuset: "2,3"
     mem_limit: 2048MB
     container_name: node-01
@@ -47,7 +47,7 @@ services:
 
   node-02:
     build: .
-    cpu_count: 2
+    cpus: 2
     cpuset: "4,5"
     mem_limit: 2048MB
     container_name: node-02

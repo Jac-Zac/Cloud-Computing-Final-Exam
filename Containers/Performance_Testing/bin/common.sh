@@ -1,9 +1,8 @@
 #!/bin/bash
 set -e
 
-LOGDIR="./logs"
 RESULTDIR="./results"
-mkdir -p "$LOGDIR" "$RESULTDIR"
+mkdir -p "$RESULTDIR"
 
 timestamp=$(date +%Y%m%d-%H%M%S)
 TARGET=${1:-"unknown"}
