@@ -38,8 +38,8 @@ RUN chmod 600 /root/.ssh/authorized_keys
 # Trust all hosts (for simplicity in test env)
 RUN echo "Host *\n\tStrictHostKeyChecking no\n\tUserKnownHostsFile /dev/null" > /root/.ssh/config
 
-# Create benchmark directory
-RUN mkdir -p /benchmark /shared /tmp/benchmark-results
+# Copy all the performance testing
+COPY Performance_Testing/ ./Performance_Testing/
 
 # Add entrypoint script
 COPY entrypoint.sh /entrypoint.sh

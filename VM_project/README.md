@@ -42,6 +42,8 @@ For example:
 
 ### Access Pattern
 
+<!-- > Moreover the script automatically configures password-less sudo for ease of use -->
+
 - **Master Node**: Direct SSH access from your local machine
 - **Worker Nodes**: SSH access only through the master node
 

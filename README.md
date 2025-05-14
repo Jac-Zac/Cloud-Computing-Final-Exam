@@ -2,10 +2,11 @@
 
 ## Projects Overview
 
-| Project Name                      | Description          | Link                                      |
-| --------------------------------- | -------------------- | ----------------------------------------- |
-| Virtual Machines Performance Test | _Part 1_ of the exam | [VM Setup and Test](./VM_project/)        |
-| Containers Performance Test       | _Part 2_ of the exam | [Containers Setup and Test](./Containers) |
+| Project Name                      | Description                             | Link                                                     |
+| --------------------------------- | --------------------------------------- | -------------------------------------------------------- |
+| Virtual Machines Performance Test | _Part 1_ of the exam                    | [VM Setup and Test](./VM_project/)                       |
+| Containers Performance Test       | _Part 2_ of the exam                    | [Containers Setup and Test](./Containers)                |
+| Performance Testing               | _Performance testing for the two parts_ | [Performance Testing](./Containers/Performance_Testing/) |
 
 ## Objective
 

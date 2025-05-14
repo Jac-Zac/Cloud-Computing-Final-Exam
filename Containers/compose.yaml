@@ -1,17 +1,11 @@
-version: "3"
-
 services:
   master:
     build: .
-    # Add limited resources
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: "2.0"
-    #       memory: 2g
-    cpus: 2.0
-    mem_limit: 2g
-    # fixed name for hostname resolution
+    # Set cpu limit
+    cpu_count: 2
+    # Set memory limit
+    mem_limit: 2048MB
+    cpuset: "0,1" # Set to only cpu 0 and 1
     container_name: master
     environment:
       # used by entrypoint script to know this is master
@@ -34,6 +28,9 @@ services:
   node-01:
     # use same Dockerfile for worker
     build: .
+    cpu_count: 2
+    cpuset: "2,3"
+    mem_limit: 2048MB
     container_name: node-01
     environment:
       - NODE_ROLE=worker
@@ -50,7 +47,9 @@ services:
 
   node-02:
     build: .
-    container_name: node-02
+    cpu_count: 2
+    cpuset: "4,5"
+    mem_limit: 2048MB
     environment:
       - NODE_ROLE=worker
     volumes:

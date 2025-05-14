@@ -54,14 +54,4 @@ else
     exit 1
 fi
 
-# Install Python packages for plotting (if Python is available)
-if command -v python3 &> /dev/null; then
-    echo "🐍 Installing Python packages for plot generation..."
-    
-    # Try to install without sudo first, fallback to sudo if needed
-    python3 -m pip install matplotlib pandas &> /dev/null || \
-    sudo python3 -m pip install matplotlib pandas &> /dev/null || \
-    echo "⚠️ Could not install Python packages. Plots may not be generated."
-fi
-
 echo "✅ Dependencies installed successfully."

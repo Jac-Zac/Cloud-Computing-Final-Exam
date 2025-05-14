@@ -27,8 +27,6 @@ The benchmark suite tests:
 ```bash
 # Install dependencies
 brew install sysbench stress-ng iozone iperf3
-brew install open-mpi  # For HPC testing
-brew install python matplotlib pandas  # For results analysis
 ```
 
 #### For VMs/Containers:
