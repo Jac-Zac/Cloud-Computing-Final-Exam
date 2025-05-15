@@ -24,12 +24,12 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
 fi
 
 SCRIPTS_DIR="$(dirname "$0")"
-BENCHMARKS="cpu,mem,disk,net,hpl"
+BENCHMARKS="cpu,mem,disk"
 MPI_HOSTFILE=""
 
 # Handle optional args
 if [[ $# -ge 1 ]]; then
-  if [[ "$1" == *","* || "$1" =~ ^(cpu|mem|disk|net|hpl)$ ]]; then
+  if [[ "$1" == *","* || "$1" =~ ^(cpu|mem|disk)$ ]]; then
     BENCHMARKS="$1"
     shift
   fi

@@ -18,7 +18,6 @@ if [[ "$(uname)" == "Darwin" ]]; then
     
     # Install macOS dependencies
     brew install sysbench iperf3 stress-ng
-    brew install open-mpi
     echo "Note: HPCC may not be available on macOS via brew. MPI tests may be limited."
     
 elif [[ "$(uname)" == "Linux" ]]; then
@@ -33,7 +32,7 @@ elif [[ "$(uname)" == "Linux" ]]; then
     fi
     
     $SUDO apt update
-    $SUDO apt install -y sysbench iozone3 iperf3 mpich stress-ng
+    $SUDO apt install -y sysbench iozone3 iperf3 stress-ng openmpi-bin
     
     # Try to install HPCC if available
     if $SUDO apt-cache search hpcc | grep -q "^hpcc "; then

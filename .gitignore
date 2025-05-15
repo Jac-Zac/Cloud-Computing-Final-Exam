@@ -1,6 +1,9 @@
 # macOS
 **/.DS_Store
 
+# Don't trak logs
+**/*.log
+
 # Python
 **/__pycache__/
 **/*.py[cod]

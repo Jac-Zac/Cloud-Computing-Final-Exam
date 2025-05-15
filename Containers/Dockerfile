@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     sysbench \
     iozone3 \
     iperf3 \
-    mpich \
+    openmpi-bin \
     hpcc \
     stress-ng \
     python3 \
