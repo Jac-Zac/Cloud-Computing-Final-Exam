@@ -33,7 +33,7 @@ elif [[ "$(uname)" == "Linux" ]]; then
     
     $SUDO apt update
     $SUDO apt install -y sysbench iozone3 iperf3 stress-ng openmpi-bin
-    
+
     # Try to install HPCC if available
     if $SUDO apt-cache search hpcc | grep -q "^hpcc "; then
         $SUDO apt install -y hpcc
