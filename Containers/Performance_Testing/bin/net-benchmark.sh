@@ -1,5 +1,5 @@
 #!/bin/bash
-source "$(dirname "$0")/common.sh" "$@"
+source "$(dirname "$0")/common.sh"
 
 if [[ "$ROLE" == "master" ]]; then
   log_info "Starting iperf3 server on master"

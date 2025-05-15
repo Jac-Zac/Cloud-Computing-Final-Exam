@@ -3,49 +3,69 @@ set -e
 
 show_help() {
   cat << EOF
-Usage: $(basename "$0") TARGET ROLE MASTER_IP [BENCHMARKS]
+Usage: $(basename "$0") [BENCHMARKS] [MPI_HOSTFILE]
 
-Run selected or all benchmarks (cpu, mem, disk, net, hpl) on the specified TARGET.
+Run selected or all benchmarks (cpu, mem, disk, net, hpl).
 
 Arguments:
-  TARGET      The target machine or environment to run benchmarks on
-  ROLE        The role of the node (e.g., master, worker)
-  MASTER_IP   The IP address of the master node
-  BENCHMARKS  (Optional) Comma-separated list of benchmarks to run (e.g., cpu,mem)
-              If not provided, all benchmarks will be run.
+  BENCHMARKS     (Optional) Comma-separated list of benchmarks (default: all)
+  MPI_HOSTFILE   (Optional) Path to an MPI hostfile for distributed execution
 
 Example:
-  $(basename "$0") node01 master 192.168.1.10 cpu,mem
+  $(basename "$0") cpu,mem hosts.txt
+  $(basename "$0") disk
 EOF
 }
 
+# Parse args
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   show_help
   exit 0
 fi
 
-if [[ $# -lt 3 || $# -gt 4 ]]; then
-  echo "Error: Invalid number of arguments."
-  show_help
-  exit 1
-fi
-
-TARGET=$1
-ROLE=$2
-MASTER_IP=$3
 SCRIPTS_DIR="$(dirname "$0")"
+BENCHMARKS="cpu,mem,disk,net,hpl"
+MPI_HOSTFILE=""
 
-if [[ -n "$4" ]]; then
-  IFS=',' read -ra BENCHMARKS <<< "$4"
-else
-  BENCHMARKS=(cpu mem disk net hpl)
+# Handle optional args
+if [[ $# -ge 1 ]]; then
+  if [[ "$1" == *","* || "$1" =~ ^(cpu|mem|disk|net|hpl)$ ]]; then
+    BENCHMARKS="$1"
+    shift
+  fi
 fi
 
-for BENCH in "${BENCHMARKS[@]}"; do
+if [[ $# -ge 1 ]]; then
+  MPI_HOSTFILE="$1"
+fi
+
+IFS=',' read -ra BENCH_LIST <<< "$BENCHMARKS"
+
+run_benchmark() {
+  BENCH=$1
   SCRIPT="$SCRIPTS_DIR/bin/${BENCH}-benchmark.sh"
-  if [[ -x "$SCRIPT" ]]; then
-    "$SCRIPT" "$TARGET" "$ROLE" "$MASTER_IP"
-  else
-    echo "Warning: Benchmark script '$SCRIPT' not found or not executable. Skipping."
+
+  if [[ ! -x "$SCRIPT" ]]; then
+    echo "Warning: $SCRIPT not found or not executable. Skipping."
+    return
   fi
+
+  if [[ "$BENCH" == "cpu" || "$BENCH" == "mem" ]]; then
+    if [[ -n "$MPI_HOSTFILE" && -f "$MPI_HOSTFILE" ]]; then
+      echo "Running $BENCH benchmark with MPI..."
+      mpirun --hostfile "$MPI_HOSTFILE" "$SCRIPT" &
+    else
+      "$SCRIPT" &
+    fi
+  else
+    "$SCRIPT"
+  fi
+}
+
+# Run selected benchmarks
+for BENCH in "${BENCH_LIST[@]}"; do
+  run_benchmark "$BENCH"
 done
+
+# Wait for parallel ones
+wait

@@ -70,17 +70,6 @@ Upon startup:
 - Worker nodes wait until the master's public key is available, then append it to their `authorized_keys`.
 - Each container starts an SSH daemon, allowing for remote command execution.
 
-== MPI Hostfile Generation
-
-The `master` node creates an MPI-compatible hostfile at `/benchmark/configs/mpi-hostfile` with fixed IP aliases. This file defines the nodes and their allocated slot for parallel computation with the following format: 
-
-  ```bash
-  # Auto-generated MPI hostfile
-  master slots=2
-  node-01 slots=2
-  node-02 slots=2
-  ```
-
 == Benchmarks execution
 
 Once all containers are operational, benchmarks workloads can be executed from the master node:
@@ -101,8 +90,7 @@ cd /benchmark
 At this point it is important to ensure that the benchmark script `run-all.sh` exists and is executable.
 
 
-== Stopping the Cluster
-
+#infobox()[
 The system has two shutdown modes: 
 
 1. Standard shutdown: stops the running containers but does not delete the volumes.
@@ -116,10 +104,9 @@ docker-compose down
 ```bash
 docker-compose down -v
 ```
+]
 
-// want to put it as an infobox?
-
-== Considerations
+=== Considerations
 
 There are several considerations to address in the system design:
 

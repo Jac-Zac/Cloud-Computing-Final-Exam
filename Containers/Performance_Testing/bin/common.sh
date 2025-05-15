@@ -5,9 +5,16 @@ RESULTDIR="./results"
 mkdir -p "$RESULTDIR"
 
 timestamp=$(date +%Y%m%d-%H%M%S)
-TARGET=${1:-"unknown"}
-ROLE=${2:-"standalone"}
-MASTER_IP=${3:-""}
+
+# Set default names for MPI or local runs
+if [[ -n "$OMPI_COMM_WORLD_SIZE" || -n "$PMI_SIZE" ]]; then
+  TARGET="mpi"
+  ROLE="distributed"
+else
+  TARGET=${1:-"local"}
+  ROLE=${2:-"standalone"}
+fi
+
 RESULTS="${RESULTDIR}/results-${TARGET}-${timestamp}.log"
 
 # Disable color if not running in terminal
@@ -22,7 +29,6 @@ log_success() { echo -e "${GREEN}[$(date +%T)] $1${RESET}" | tee -a "$RESULTS"; 
 log_warn()    { echo -e "${YELLOW}[$(date +%T)] $1${RESET}" | tee -a "$RESULTS"; }
 log_error()   { echo -e "${RED}[$(date +%T)] $1${RESET}" | tee -a "$RESULTS"; }
 
-# Collect system info, macOS and Linux support
 get_os() {
   if [[ -f /etc/os-release ]]; then
     grep PRETTY_NAME /etc/os-release | cut -d'"' -f2

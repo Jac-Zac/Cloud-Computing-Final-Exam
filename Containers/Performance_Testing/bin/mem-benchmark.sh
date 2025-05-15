@@ -1,5 +1,5 @@
 #!/bin/bash
-source ./common.sh "$@"
+source ./common.sh
 
 log_info "-> Running sysbench memory test (10G)..."
 sysbench memory --memory-block-size=1K --memory-total-size=10G run | tee -a "$RESULTS"

@@ -59,20 +59,6 @@ The master generates an SSH key and shares it with workers via a Docker-managed 
 - Workers wait until the master's public key is available, then append it to their `authorized_keys`.
 - SSH daemon is started in each container.
 
-## 🖥️ MPI Hostfile Generation
-
-On the `master` node:
-
-- A hostfile is created at `/benchmark/configs/mpi-hostfile` with fixed IP aliases.
-- Format:
-
-  ```
-  # Auto-generated MPI hostfile
-  master slots=2
-  node-01 slots=2
-  node-02 slots=2
-  ```
-
 ## 📊 Running Benchmarks
 
 Once all containers are up, run benchmarks from the master node:

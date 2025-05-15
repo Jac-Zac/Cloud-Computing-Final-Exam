@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-source ./common.sh "$@"
+source ./common.sh
 
 OUTPUT_FILE="${RESULTS:-disk_test_results.log}"
 LOCAL_FILE="./iozone_local.tmp"
