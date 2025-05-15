@@ -3,82 +3,167 @@ import os
 import re
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
-# --- CONFIGURATION: just the two base folders, and the 3 connection names ---
-CONN_TYPES = ["master_node", "node_master", "node_node"]
-BASE_DIRS = {
-    "container": "../results/containers/net",
-    "vm": "../results/vms/net",
-}
-OUTPUT_DIR = "plots"
+plt.style.use("ggplot")
+
+# threshold (Gbits/sec) to distinguish high-speed vs low-speed
+BW_THRESHOLD = 70.0
 
 
-# --- PARSER FUNCTIONS ---
-def parse_iperf_log(path):
-    """
-    Given an iperf3 log, returns two lists:
-     - intervals: [0.00-1.00, 1.00-2.00, ...]
-     - rates:     [2.97, 2.95, ...]   # in Gbits/sec
-    """
-    intervals, rates = [], []
-    line_pat = re.compile(
-        r"\[\s*\d+\]\s+(\d+\.\d+-\d+\.\d+)\s+sec\s+[\d.]+\s+\w+\s+([\d.]+)\s+Gbits/sec"
-    )
-    with open(path) as f:
-        for line in f:
-            m = line_pat.search(line)
-            if not m:
-                continue
-            intervals.append(m.group(1))
+def parse_iperf(lines):
+    times, rates = [], []
+    # convert interval start times to float for proper plotting
+    pattern = re.compile(r"(\d+\.\d+)-\d+\.\d+\s+sec.*?([\d.]+)\s+Gbits/sec")
+    for ln in lines:
+        m = pattern.search(ln)
+        if m:
+            times.append(float(m.group(1)))
             rates.append(float(m.group(2)))
-    return intervals, rates
+    return times, rates
 
 
-# --- PLOTTING HELPER ---
-def plot_compare(conn, series):
-    """
-    series = {
-      "container": (intervals, rates),
-      "vm":        (intervals, rates),
-    }
-    """
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    plt.figure(figsize=(10, 5))
-    for label, (x, y) in series.items():
-        plt.plot(x, y, marker="o", label=label.capitalize())
-    plt.title(
-        f"Iperf3 Bandwidth: {conn.replace('_',' ↔ ')}", fontsize=14, weight="bold"
-    )
-    plt.xlabel("Time interval (sec)")
-    plt.ylabel("Bandwidth (Gbits/sec)")
-    plt.xticks(rotation=45)
-    plt.grid(True, linestyle="--", alpha=0.6)
-    plt.legend()
-    plt.tight_layout()
-    out = os.path.join(OUTPUT_DIR, f"{conn}_iperf_compare.png")
-    plt.savefig(out)
-    plt.close()
-    print(f"[INFO] saved {out}")
+def parse_ping(lines):
+    return [
+        float(m.group(1))
+        for m in (re.search(r"time=(\d+\.\d+)", l) for l in lines)
+        if m
+    ]
 
 
-# --- MAIN WORKFLOW ---
+def discover_logs(root):
+    logs = {}
+    for system in ("containers", "vms"):
+        d = os.path.join(root, system, "net")
+        if not os.path.isdir(d):
+            print(f"[WARN] directory not found: {d}")
+            continue
+        for fname in os.listdir(d):
+            if not fname.endswith(".log"):
+                continue
+            name = os.path.splitext(fname)[0]
+            label = f"{name} ({system[:-1]})"
+            logs[label] = os.path.join(d, fname)
+    return logs
+
+
 if __name__ == "__main__":
-    for conn in CONN_TYPES:
-        # build file paths
-        paths = {}
-        for kind, base in BASE_DIRS.items():
-            # fix possible typo in folder name
-            folder = base
-            fp = os.path.join(folder, f"{conn}.log")
-            if not os.path.isfile(fp):
-                raise FileNotFoundError(f"Missing log for {kind} {conn}: {fp}")
-            paths[kind] = fp
+    results_root = "../results"
+    out_dir = "plots/network"
+    os.makedirs(out_dir, exist_ok=True)
 
-        # parse both logs
-        series = {}
-        for kind, fp in paths.items():
-            x, y = parse_iperf_log(fp)
-            series[kind] = (x, y)
+    log_paths = discover_logs(results_root)
+    if not log_paths:
+        raise SystemExit(
+            "❌ No logs found under ../results/containers/net or ../results/vms/net"
+        )
 
-        # plot comparison
-        plot_compare(conn, series)
+    rows = []
+    time_series = {}
+    latency_series = {}
+
+    for label, path in log_paths.items():
+        with open(path) as fh:
+            lines = fh.readlines()
+
+        ip_lines = [l for l in lines if "Gbits/sec" in l and "sec" in l]
+        ping_lines = [l for l in lines if "icmp_seq" in l]
+
+        times, rates = parse_iperf(ip_lines)
+        lats = parse_ping(ping_lines)
+
+        avg_bw = sum(rates) / len(rates) if rates else 0.0
+        avg_lat = sum(lats) / len(lats) if lats else 0.0
+
+        rows.append(
+            {
+                "Environment": label,
+                "Avg Bandwidth (Gbits/sec)": avg_bw,
+                "Avg Latency (ms)": avg_lat,
+            }
+        )
+        # store sorted series and drop last point to avoid wrap
+        if times:
+            sorted_pairs = sorted(zip(times, rates))
+            # drop last interval if desired to avoid weird edge
+            sorted_pairs = sorted_pairs[:-1]
+            ts, rs = zip(*sorted_pairs)
+            time_series[label] = (list(ts), list(rs))
+        else:
+            time_series[label] = ([], [])
+        latency_series[label] = lats
+
+    df = pd.DataFrame(rows).set_index("Environment")
+    print("\n=== Network Summary ===")
+    print(df)
+
+    # split into high- vs low-speed
+    high = df[df["Avg Bandwidth (Gbits/sec)"] > BW_THRESHOLD].index.tolist()
+    low = df[df["Avg Bandwidth (Gbits/sec)"] <= BW_THRESHOLD].index.tolist()
+
+    def plot_bar(envs, fname, title):
+        if not envs:
+            return
+        vals = df.loc[envs, "Avg Bandwidth (Gbits/sec)"]
+        fig, ax = plt.subplots(figsize=(8, 5))
+        x = range(len(envs))
+        bars = ax.bar(x, vals, tick_label=envs, color=plt.cm.Set2.colors[: len(envs)])
+        for b in bars:
+            h = b.get_height()
+            ax.annotate(
+                f"{h:.2f}",
+                xy=(b.get_x() + b.get_width() / 2, h),
+                xytext=(0, 5),
+                textcoords="offset points",
+                ha="center",
+            )
+        ax.set_title(title, fontsize=14, weight="bold")
+        ax.set_ylabel("Gbits/sec")
+        ax.grid(axis="y", linestyle="--", alpha=0.7)
+        plt.xticks(rotation=30, ha="right")
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, fname))
+        plt.close()
+
+    def plot_timeseries(envs, fname, title):
+        if not envs:
+            return
+        fig, ax = plt.subplots(figsize=(10, 6))
+        for lbl in envs:
+            times, rates = time_series[lbl]
+            ax.plot(times, rates, marker="o", linestyle="-", label=lbl)
+        ax.set_title(title, fontsize=14, weight="bold")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Gbits/sec")
+        ax.grid(True, linestyle="--", alpha=0.6)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, fname))
+        plt.close()
+
+    plot_bar(high, "avg_bw_high.png", "Average Bandwidth (High-Speed Links)")
+    plot_bar(low, "avg_bw_low.png", "Average Bandwidth (Low-Speed Links)")
+    plot_timeseries(high, "bw_ts_high.png", "Bandwidth Over Time (High-Speed)")
+    plot_timeseries(low, "bw_ts_low.png", "Bandwidth Over Time (Low-Speed)")
+
+    # combined latency boxplot
+    fig, ax = plt.subplots(figsize=(8, 5))
+    pos = list(range(len(df)))
+    data = [latency_series[lbl] for lbl in df.index]
+    ax.boxplot(
+        data,
+        positions=pos,
+        patch_artist=True,
+        boxprops=dict(facecolor="lightblue", color="gray"),
+        medianprops=dict(color="red"),
+    )
+    ax.set_title("Ping Latency Distribution", fontsize=14, weight="bold")
+    ax.set_ylabel("Latency (ms)")
+    ax.set_xticks(pos)
+    ax.set_xticklabels(df.index, rotation=30, ha="right")
+    ax.grid(axis="y", linestyle="--", alpha=0.7)
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "latency_boxplot.png"))
+    plt.close()
+
+    print(f"\n✅ Done! Plots saved to '{out_dir}/'.")
