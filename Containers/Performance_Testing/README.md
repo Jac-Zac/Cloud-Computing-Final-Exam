@@ -40,24 +40,19 @@ The benchmark scripts will automatically install dependencies using:
 ## Directory Structure
 
 ```
-benchmark-suite/
-├── scripts/
-│   ├── cpu-benchmark.sh
-│   ├── mem-benchmark.sh
-│   ├── disk-benchmark.sh
-│   ├── net-benchmark.sh
-│   ├── hpl-benchmark.sh
+├── bin
+│   ├── results
 │   ├── common.sh
-│   ├── install-deps.sh
-│   ├── run-all.sh
-│   └── collect-results.sh  # New script to gather results
-├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
-├── config/
-│   └── mpi-hostfile.template
-└── results/
-    └── plots/
+│   ├── cpu-benchmark.sh
+│   ├── disk-benchmark.sh
+│   ├── mem-benchmark.sh
+│   └── net-benchmark.sh
+├── configs
+│   ├── .txt
+│   └── mpi-hostfile
+├── install-deps.sh
+├── README.md
+└── run-all.sh
 ```
 
 ## Running Benchmarks
@@ -115,21 +110,6 @@ The suite automatically detects NFS/shared filesystems during disk benchmarks. I
 ./disk-benchmark.sh target mode role master-ip /shared
 ```
 
-## Collecting Results
-
-After running benchmarks on all systems, use the collection script:
-
-```bash
-./collect-results.sh output_directory
-```
-
-This will:
-
-1. Gather results from all VMs via SSH (configure in script)
-2. Copy results from Docker containers
-3. Include host results
-4. Generate comparison plots
-
 ## Docker Compose Configuration
 
 The provided `docker-compose.yml` correctly:
@@ -139,30 +119,16 @@ The provided `docker-compose.yml` correctly:
 - Creates a bridge network for inter-container communication
 - Designates container roles (master/worker)
 
-## Understanding the Results
-
-Results are organized by:
-
-- Environment type (VM/container/host)
-- Node name
-- Benchmark type
-
-Plots show comparisons between different environments for each metric, helping identify performance differences between virtualization methods.
-
-## Customization
-
-- Edit `common.sh` to adjust log directories and common functions
-- Modify individual benchmark scripts to change test parameters
-- Update `docker-compose.yml` to adjust container resources
-
-## Troubleshooting
-
-- If MPI tests fail, check that hostfiles are correctly generated
-- For network tests, verify firewall rules allow iperf3 traffic
-- For shared filesystem tests, ensure mount points exist and have correct permissions
-
 # I runned this for hppc:
 
 ```bash
  mpirun.openmpi -mca btl_tcp_if_include enp0s9 -np 6 -hostfile mpi-hostfile hpcc
+```
+
+Note that the output of iozone at least on the containers says this:
+
+```bash
+Timer resolution is poor. Some small transfers may have
+reported inaccurate results. Sizes 64 kBytes and below.
+root@986c6a33ce28:/shared/Performance_Testing/bin# ls -la
 ```
