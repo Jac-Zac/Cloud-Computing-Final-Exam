@@ -160,3 +160,9 @@ Plots show comparisons between different environments for each metric, helping i
 - If MPI tests fail, check that hostfiles are correctly generated
 - For network tests, verify firewall rules allow iperf3 traffic
 - For shared filesystem tests, ensure mount points exist and have correct permissions
+
+# I runned this for hppc:
+
+```bash
+ mpirun.openmpi -mca btl_tcp_if_include enp0s9 -np 6 -hostfile mpi-hostfile hpcc
+```

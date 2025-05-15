@@ -14,7 +14,6 @@ services:
       - NODE_ROLE=master
     volumes:
       - hpc-shared:/shared
-      - ./results/master:/tmp/benchmark-results
     networks:
       hpcnet:
         # Optional fixed IP for consistency
@@ -37,7 +36,6 @@ services:
       - NODE_ROLE=worker
     volumes:
       - hpc-shared:/shared
-      - ./results/node-01:/tmp/benchmark-results
     networks:
       hpcnet:
         ipv4_address: 172.28.1.11
@@ -55,7 +53,6 @@ services:
       - NODE_ROLE=worker
     volumes:
       - hpc-shared:/shared
-      - ./results/node-02:/tmp/benchmark-results
     networks:
       hpcnet:
         ipv4_address: 172.28.1.12

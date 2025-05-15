@@ -3,7 +3,7 @@
 source "$(dirname "$0")/common.sh"
 
 OUTPUT_FILE="${RESULTS:-disk_test_results.log}"
-LOCAL_FILE="./iozone_local.tmp"
+LOCAL_FILE="/tmp/iozone_local.tmp"
 SHARED_MOUNT="/shared"
 SHARED_FILE="$SHARED_MOUNT/iozone_shared.tmp"
 
