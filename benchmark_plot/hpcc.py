@@ -118,6 +118,10 @@ def generate_metric_plots(df, metric_groups, out_dir, dpi=200):
         systems = df["System"].unique()
         for i, metric in enumerate(available):
             ax = axes_flat[i]
+            # Ensure grid is drawn behind bars
+            ax.set_axisbelow(True)
+            ax.grid(axis="y", linestyle="--", alpha=0.5, zorder=0)
+            # Gather values
             vals = [df[df.System == s][metric].iloc[-1] for s in systems]
             if metric in lower_is_better:
                 wi, li = _np.argmin(vals), _np.argmax(vals)
@@ -125,14 +129,16 @@ def generate_metric_plots(df, metric_groups, out_dir, dpi=200):
                 wi, li = _np.argmax(vals), _np.argmin(vals)
             colors = [NORD_GRAY] * len(systems)
             colors[wi], colors[li] = NORD_GREEN, NORD_RED
-            if len(systems) == 2:
-                colors = [NORD_GREEN, NORD_RED] if wi == 0 else [NORD_RED, NORD_GREEN]
-            bars = ax.bar(systems, vals, color=colors)
+            # Plot bars above grid
+            bars = ax.bar(systems, vals, color=colors, zorder=3)
             for bar, v in zip(bars, vals):
                 ax.text(
-                    bar.get_x() + bar.get_width() / 2, v * 1.01, f"{v:.3g}", ha="center"
+                    bar.get_x() + bar.get_width() / 2,
+                    v * 1.01,
+                    f"{v:.3g}",
+                    ha="center",
+                    zorder=4,
                 )
-            ax.grid(linestyle="--", alpha=0.5, zorder=0)
             ax.set_title(metric.replace("_", " "), color=NORD_FG)
             ax.set_ylabel(metric.split("_")[-1], color=NORD_FG)
             ax.tick_params(axis="x", rotation=45, colors=NORD_FG)
@@ -148,6 +154,7 @@ def generate_metric_plots(df, metric_groups, out_dir, dpi=200):
                 fontsize=8,
                 style="italic",
                 color=NORD_FG,
+                zorder=5,
             )
             for spine in ax.spines.values():
                 spine.set_color(NORD_GRAY)
