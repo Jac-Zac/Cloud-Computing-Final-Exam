@@ -10,12 +10,11 @@ import pandas as pd
 NORD_FG = "#2E3440"
 NORD_GREEN = "#A3BE8C"
 NORD_RED = "#BF616A"
-NORD_GRAY = "#4C566A"
+NORD_GRAY = "#808080"
 
 # Output directory
 OUT_DIR = "plots/hpcc"
 os.makedirs(OUT_DIR, exist_ok=True)
-
 
 HPCC_FILES = {
     "vms": "../results/vms/hpccoutf.txt",
@@ -58,13 +57,10 @@ def extract_timestamp(lines):
 
 
 def parse_hpcc_output(file_path, system_name):
-    """
-    Parse all summary sections in an HPCC output file, return one dict per run.
-    """
     text = open(file_path).read()
     entries = []
     parts = re.split(r"Begin of Summary section\.", text)
-    secs = parts[1:]  # secs are the parts after each "Begin of Summary section."
+    secs = parts[1:]
 
     for i, sec in enumerate(secs):
         part, _ = sec.split("End of Summary section.", 1)
@@ -80,18 +76,13 @@ def parse_hpcc_output(file_path, system_name):
         metrics["Timestamp"] = extract_timestamp(part.splitlines())
         metrics["System"] = system_name
 
-        # Parse preceding text to find the HPL section for this Summary section
-        preceding_text = parts[
-            i
-        ]  # parts[0] is before first Summary, parts[i] corresponds to current sec
+        preceding_text = parts[i]
         hpl_start = preceding_text.find("Begin of HPL section.")
         hpl_end = preceding_text.find("End of HPL section.")
         if hpl_start != -1 and hpl_end != -1:
             hpl_section = preceding_text[hpl_start:hpl_end]
-            # Parse each HPL test line
             for line in hpl_section.splitlines():
                 line = line.strip()
-                # Match lines like WR11C2R4        1024    32     2     3               0.23              3.179e+00
                 match = re.match(
                     r"^WR\S+\s+(\d+)\s+(\d+)\s+\d+\s+\d+\s+[\d.]+\s+([\d.e+-]+)$", line
                 )
@@ -99,7 +90,6 @@ def parse_hpcc_output(file_path, system_name):
                     n = int(match.group(1))
                     nb = int(match.group(2))
                     gflops = float(match.group(3))
-                    # Create a new entry for this HPL test
                     hpl_metrics = metrics.copy()
                     hpl_metrics.update(
                         {
@@ -110,7 +100,6 @@ def parse_hpcc_output(file_path, system_name):
                         }
                     )
                     entries.append(hpl_metrics)
-        # Append the original metrics entry from the Summary section
         entries.append(metrics)
     return entries
 
@@ -143,9 +132,10 @@ def generate_metric_plots(df, metric_groups, out_dir, dpi=200):
                 ax.text(
                     bar.get_x() + bar.get_width() / 2, v * 1.01, f"{v:.3g}", ha="center"
                 )
-            ax.set_title(metric.replace("_", " "))
-            ax.set_ylabel(metric.split("_")[-1])
-            ax.tick_params(axis="x", rotation=45)
+            ax.set_title(metric.replace("_", " "), color=NORD_FG)
+            ax.set_ylabel(metric.split("_")[-1], color=NORD_FG)
+            ax.tick_params(axis="x", rotation=45, colors=NORD_FG)
+            ax.tick_params(axis="y", colors=NORD_FG)
             better = (
                 "Lower is better" if metric in lower_is_better else "Higher is better"
             )
@@ -156,7 +146,10 @@ def generate_metric_plots(df, metric_groups, out_dir, dpi=200):
                 ha="center",
                 fontsize=8,
                 style="italic",
+                color=NORD_FG,
             )
+            for spine in ax.spines.values():
+                spine.set_color(NORD_GRAY)
         for j in range(len(available), len(axes_flat)):
             axes_flat[j].axis("off")
         plt.tight_layout()
@@ -168,28 +161,42 @@ def generate_metric_plots(df, metric_groups, out_dir, dpi=200):
 
 def generate_hpl_scaling_plot(df, out_dir, dpi=200):
     """
-    Plot HPL_Gflops vs HPL_N for each System, using the best Gflops for each N.
+    Plot HPL_Gflops vs HPL_N for each System using Nord colors.
     """
-    # Filter and aggregate
     hpl_df = df.dropna(subset=["HPL_Gflops"])
     if hpl_df.empty:
         print("⚠️ No HPL test data")
         return
 
-    # Group by System and HPL_N, take max Gflops
     hpl_max = hpl_df.groupby(["System", "HPL_N"])["HPL_Gflops"].max().reset_index()
 
     plt.figure(figsize=(8, 5))
     for sys, grp in hpl_max.groupby("System"):
         grp_sorted = grp.sort_values("HPL_N")
+        # Assign colors directly based on system name
+        color = NORD_RED if sys == "vms" else NORD_GREEN
         plt.plot(
-            grp_sorted["HPL_N"], grp_sorted["HPL_Gflops"] / 1000, marker="o", label=sys
+            grp_sorted["HPL_N"],
+            grp_sorted["HPL_Gflops"] / 1000,
+            marker="o",
+            color=color,
+            label=sys,
+            linewidth=2,
+            markersize=8,
         )
-    plt.xlabel("Problem Size (HPL_N)")
-    plt.ylabel("Performance (Tflops)")
-    plt.title("HPL Scaling: Performance vs Problem Size")
-    plt.legend()
-    plt.grid(True, linestyle="--", alpha=0.5)
+
+    plt.gca().set_facecolor("white")
+    plt.grid(True, linestyle="--", alpha=0.7, color=NORD_GRAY)
+    plt.title("HPL Scaling: Performance vs Problem Size", color=NORD_FG, pad=20)
+    plt.xlabel("Problem Size (HPL_N)", color=NORD_FG)
+    plt.ylabel("Performance (Tflops)", color=NORD_FG)
+    plt.legend(title="System", title_fontsize=10)
+
+    plt.tick_params(axis="both", colors=NORD_GRAY)
+    for spine in plt.gca().spines.values():
+        spine.set_color(NORD_GRAY)
+
+    plt.tight_layout()
     path = os.path.join(out_dir, "hpl_scaling.png")
     plt.savefig(path, dpi=dpi, bbox_inches="tight")
     plt.close()
@@ -197,11 +204,14 @@ def generate_hpl_scaling_plot(df, out_dir, dpi=200):
 
 
 def generate_value_matrix_plot(df, metrics, out_dir, dpi=200):
+    # Filter to only include metrics from largest problem size runs
     mets = [m for m in metrics if m in df]
     if not mets:
         print("⚠️ No important metrics")
         return
+
     mat = df.set_index("System")[mets].T
+
     lower_better = {"AvgPingPongLatency_usec"}
     colors = []
     for m in mat.index:
@@ -211,36 +221,87 @@ def generate_value_matrix_plot(df, metrics, out_dir, dpi=200):
             if m in lower_better
             else (row.idxmax(), row.idxmin())
         )
+        # Direct color assignment based on system name
         colors.append(
             [
-                NORD_GREEN if c == w else NORD_RED if c == l else NORD_GRAY
+                (NORD_GREEN if c == "containers" else NORD_RED) if c == w else NORD_GRAY
                 for c in mat.columns
             ]
         )
+
     fig, ax = plt.subplots(
         figsize=(1.5 * len(mat.columns) + 2, 0.5 * len(mat.index) + 2)
     )
     ax.axis("off")
+
+    # Create table with styled text
+    cell_text = []
+    for idx, row in mat.iterrows():
+        formatted_row = []
+        for val in row:
+            if "Tflops" in idx:
+                formatted_row.append(f"{val:.3f}")
+            elif "Latency" in idx:
+                formatted_row.append(f"{val:.1f}")
+            else:
+                formatted_row.append(f"{val:.2f}")
+        cell_text.append(formatted_row)
+
     table = ax.table(
-        cellText=mat.values,
+        cellText=cell_text,
         rowLabels=mat.index.str.replace("_", " "),
         colLabels=mat.columns,
         cellColours=colors,
         loc="center",
+        cellLoc="center",
     )
+
+    # Style table
     table.auto_set_font_size(False)
-    table.set_fontsize(9)
+    table.set_fontsize(10)
+    table.scale(1, 1.5)
+
+    # Set colors and alignment
     for key, cell in table.get_celld().items():
         cell.get_text().set_color(NORD_FG)
         cell.set_edgecolor(NORD_GRAY)
+        cell.set_linewidth(0.5)
+
     plt.tight_layout()
     path = os.path.join(out_dir, "performance_value_matrix.png")
-    fig.savefig(path, dpi=dpi)
+    fig.savefig(path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     print(f"📊 Saved: {path}")
 
 
-def save_configuration_info(df, configs, out_dir, dpi=200):
+def get_matrix_dataframe(df):
+    """Filter dataframe to include only runs with largest HPL_N per system"""
+    hpl_test_entries = df[df["HPL_N"].notna()]
+    if hpl_test_entries.empty:
+        return df
+
+    # Find max HPL_N per run
+    hpl_max_per_run = (
+        hpl_test_entries.groupby(["System", "Timestamp"])["HPL_N"].max().reset_index()
+    )
+
+    # Find max HPL_N per system
+    max_hpl_per_system = hpl_max_per_run.groupby("System")["HPL_N"].max().reset_index()
+
+    # Get corresponding timestamps
+    max_hpl_runs = max_hpl_per_system.merge(
+        hpl_max_per_run, on=["System", "HPL_N"], how="left"
+    )
+
+    # Get summary entries for these runs
+    matrix_df = df[df["HPL_N"].isna()].merge(
+        max_hpl_runs[["System", "Timestamp"]], on=["System", "Timestamp"], how="inner"
+    )
+
+    return matrix_df
+
+
+def save_configuration_info(df, configs, out_dir):
     avail = [m for m in configs if m in df]
     if not avail:
         print("⚠️ No config data")
@@ -248,23 +309,6 @@ def save_configuration_info(df, configs, out_dir, dpi=200):
     csv = os.path.join(out_dir, "hpcc_config.csv")
     df[["System"] + avail].to_csv(csv, index=False)
     print(f"📄 Saved: {csv}")
-    fig, ax = plt.subplots(figsize=(10, len(avail) * 0.3 + 1))
-    ax.axis("off")
-    tbl = ax.table(
-        cellText=df[["System"] + avail].values,
-        colLabels=["System"] + avail,
-        loc="center",
-    )
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(9)
-    for key, cell in tbl.get_celld().items():
-        cell.get_text().set_color(NORD_FG)
-        cell.set_edgecolor(NORD_GRAY)
-    plt.tight_layout()
-    path = os.path.join(out_dir, "system_config_table.png")
-    fig.savefig(path, dpi=dpi)
-    plt.close(fig)
-    print(f"📊 Saved: {path}")
 
 
 def main():

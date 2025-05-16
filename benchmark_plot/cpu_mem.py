@@ -126,6 +126,7 @@ def discover_logs(base_dir):
 
 def visualize_metrics(df, plot_dir=PLOT_DIR):
     """Generate comparison plots, excluding host from CPU charts."""
+    import matplotlib.ticker as ticker
     import numpy as np
 
     os.makedirs(plot_dir, exist_ok=True)
@@ -204,6 +205,29 @@ def visualize_metrics(df, plot_dir=PLOT_DIR):
         plt.yscale(scale)
         plt.xticks(rotation=45, ha="right")
 
+        # Set y-axis limits properly and add more ticks for memory (log scale)
+        if scale == "log":
+            min_val = data[metric].min()
+            bottom_limit = min_val / 10 if min_val > 0 else 1e-3
+            plt.ylim(bottom=bottom_limit)
+
+            # Add more ticks on log scale for memory plots
+            ax = plt.gca()
+            # Use LogLocator with base 10 and subs for minor ticks (e.g., 1-9)
+            ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0))
+            ax.yaxis.set_minor_locator(
+                ticker.LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=10)
+            )
+            ax.yaxis.set_minor_formatter(
+                ticker.NullFormatter()
+            )  # Hide minor tick labels
+            ax.tick_params(
+                axis="y", which="minor", length=4
+            )  # Show minor ticks with smaller length
+
+        else:
+            plt.ylim(bottom=0)
+
         for bar in bars:
             h = bar.get_height()
             plt.annotate(
@@ -238,8 +262,20 @@ def main():
 
     # Create DataFrame and save results
     df = pd.DataFrame(results).set_index("label")
-    csv_path = os.path.join(PLOT_DIR, "benchmark_results.csv")
-    df.to_csv(csv_path)
+
+    # Split and save CPU results
+    cpu_df = df[df.index.str.endswith("_cpu")]
+    cpu_dir = os.path.join(PLOT_DIR, "cpu")
+    os.makedirs(cpu_dir, exist_ok=True)
+    cpu_csv_path = os.path.join(cpu_dir, "cpu_summary.csv")
+    cpu_df.to_csv(cpu_csv_path)
+
+    # Split and save Memory results
+    mem_df = df[df.index.str.endswith("_mem")]
+    mem_dir = os.path.join(PLOT_DIR, "memory")
+    os.makedirs(mem_dir, exist_ok=True)
+    mem_csv_path = os.path.join(mem_dir, "mem_summary.csv")
+    mem_df.to_csv(mem_csv_path)
 
     print("\nBenchmark Results:")
     print(df.to_string())  # Using pandas' built-in string formatting
