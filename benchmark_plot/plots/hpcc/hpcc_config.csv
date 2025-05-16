@@ -1,3 +1,0 @@
-System,HPL_N,HPL_NB,HPL_nprow,HPL_npcol,CommWorldProcs,STREAM_VectorSize,FFT_N,PTRANS_n
-vms,8192.0,64.0,2.0,3.0,6.0,3728270.0,2097152.0,4096.0
-containers,8192.0,32.0,2.0,3.0,6.0,3728270.0,2097152.0,1024.0

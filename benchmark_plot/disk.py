@@ -132,16 +132,34 @@ if __name__ == "__main__":
         vm_data = grp[grp["environment"] == "vm"]
         cont_data = grp[grp["environment"] == "container"]
 
-        pivot_vm = vm_data.pivot_table(
-            index="reclen", columns="kB", values="value", aggfunc="mean"
-        ).reindex(index=all_reclen, columns=all_kb)
-        pivot_cont = cont_data.pivot_table(
-            index="reclen", columns="kB", values="value", aggfunc="mean"
-        ).reindex(index=all_reclen, columns=all_kb)
+        # Create evenly spaced index positions for both axes
+        x_positions = np.arange(len(all_kb))
+        y_positions = np.arange(len(all_reclen))
 
-        X, Y = np.meshgrid(all_kb, all_reclen)
-        Z_vm = pivot_vm.values
-        Z_cont = pivot_cont.values
+        # Create a mapping from actual values to positions
+        kb_to_pos = {kb: i for i, kb in enumerate(all_kb)}
+        reclen_to_pos = {reclen: i for i, reclen in enumerate(all_reclen)}
+
+        # Create pivot tables with position indices
+        vm_matrix = np.full((len(all_reclen), len(all_kb)), np.nan)
+        cont_matrix = np.full((len(all_reclen), len(all_kb)), np.nan)
+
+        for _, row in vm_data.iterrows():
+            kb = row["kB"]
+            reclen = row["reclen"]
+            if kb in kb_to_pos and reclen in reclen_to_pos:
+                vm_matrix[reclen_to_pos[reclen], kb_to_pos[kb]] = row["value"]
+
+        for _, row in cont_data.iterrows():
+            kb = row["kB"]
+            reclen = row["reclen"]
+            if kb in kb_to_pos and reclen in reclen_to_pos:
+                cont_matrix[reclen_to_pos[reclen], kb_to_pos[kb]] = row["value"]
+
+        # Create meshgrid using positions
+        X, Y = np.meshgrid(x_positions, y_positions)
+        Z_vm = vm_matrix
+        Z_cont = cont_matrix
 
         zmin = min(np.nanmin(Z_vm), np.nanmin(Z_cont))
         zmax = max(np.nanmax(Z_vm), np.nanmax(Z_cont))
@@ -156,32 +174,45 @@ if __name__ == "__main__":
         # VM subplot
         ax1 = fig.add_subplot(1, 2, 1, projection="3d")
         surf1 = ax1.plot_surface(X, Y, Z_vm, cmap="viridis", edgecolor="none")
-        ax1.set_xlim(min(all_kb), max(all_kb))
-        ax1.set_ylim(min(all_reclen), max(all_reclen))
+        ax1.set_xlim(min(x_positions), max(x_positions))
+        ax1.set_ylim(min(y_positions), max(y_positions))
         ax1.set_zlim(zmin, zmax)
+
+        # Set custom ticks for x and y axes using the actual values
+        ax1.set_xticks(x_positions)
+        ax1.set_xticklabels([f"{kb}" for kb in all_kb], rotation=45)
+        ax1.set_yticks(y_positions)
+        ax1.set_yticklabels([f"{rl}" for rl in all_reclen])
+
         ax1.set_xlabel("File Size (kB)", labelpad=15)
         ax1.set_ylabel("Record Size (bytes)", labelpad=15)
         ax1.set_zlabel(metric, labelpad=15)
         ax1.view_init(elev=elev, azim=azim)
-        # tidy ticks
-        ax1.xaxis.set_tick_params(rotation=45, pad=10)
-        ax1.yaxis.set_tick_params(rotation=0, pad=10)
-        ax1.zaxis.set_tick_params(rotation=0, pad=10)
+        ax1.xaxis.set_tick_params(pad=10)
+        ax1.yaxis.set_tick_params(pad=10)
+        ax1.zaxis.set_tick_params(pad=10)
         ax1.set_title(f"VM: {metric}\nRole: {role}, Section: {section}", pad=20)
 
         # Container subplot
         ax2 = fig.add_subplot(1, 2, 2, projection="3d")
         surf2 = ax2.plot_surface(X, Y, Z_cont, cmap="viridis", edgecolor="none")
-        ax2.set_xlim(min(all_kb), max(all_kb))
-        ax2.set_ylim(min(all_reclen), max(all_reclen))
+        ax2.set_xlim(min(x_positions), max(x_positions))
+        ax2.set_ylim(min(y_positions), max(y_positions))
         ax2.set_zlim(zmin, zmax)
+
+        # Set custom ticks for x and y axes using the actual values
+        ax2.set_xticks(x_positions)
+        ax2.set_xticklabels([f"{kb}" for kb in all_kb], rotation=45)
+        ax2.set_yticks(y_positions)
+        ax2.set_yticklabels([f"{rl}" for rl in all_reclen])
+
         ax2.set_xlabel("File Size (kB)", labelpad=15)
         ax2.set_ylabel("Record Size (bytes)", labelpad=15)
         ax2.set_zlabel(metric, labelpad=15)
         ax2.view_init(elev=elev, azim=azim)
-        ax2.xaxis.set_tick_params(rotation=45, pad=10)
-        ax2.yaxis.set_tick_params(rotation=0, pad=10)
-        ax2.zaxis.set_tick_params(rotation=0, pad=10)
+        ax2.xaxis.set_tick_params(pad=10)
+        ax2.yaxis.set_tick_params(pad=10)
+        ax2.zaxis.set_tick_params(pad=10)
         ax2.set_title(f"Container: {metric}\nRole: {role}, Section: {section}", pad=20)
 
         fig.colorbar(surf1, ax=[ax1, ax2], shrink=0.5, aspect=20)
