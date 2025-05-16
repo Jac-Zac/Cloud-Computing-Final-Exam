@@ -125,8 +125,7 @@ def discover_logs(base_dir):
 
 
 def visualize_metrics(df, plot_dir=PLOT_DIR):
-    """Generate comparison plots, excluding host from CPU charts."""
-    import matplotlib.ticker as ticker
+    """Generate comparison plots with grid lines behind the bars."""
     import numpy as np
 
     os.makedirs(plot_dir, exist_ok=True)
@@ -134,8 +133,6 @@ def visualize_metrics(df, plot_dir=PLOT_DIR):
     mem_dir = os.path.join(plot_dir, "memory")
     os.makedirs(cpu_dir, exist_ok=True)
     os.makedirs(mem_dir, exist_ok=True)
-
-    plt.style.use("ggplot")
 
     NORD_GREEN = "#A3BE8C"
     NORD_RED = "#BF616A"
@@ -177,7 +174,6 @@ def visualize_metrics(df, plot_dir=PLOT_DIR):
     }
 
     for metric, (title, ylabel, scale, unit, dest_dir, suffix) in metrics.items():
-        # Filter to correct suffix, drop host and NaNs
         filt = df.index.str.endswith(suffix) & ~df.index.str.startswith("host")
         data = df[filt].dropna(subset=[metric]).sort_index()
 
@@ -187,6 +183,10 @@ def visualize_metrics(df, plot_dir=PLOT_DIR):
 
         plt.figure(figsize=(10, 6))
 
+        # Draw grid behind bars
+        plt.grid(axis="y", linestyle="--", linewidth=0.5, zorder=0)
+
+        # Identify winners/losers
         if metric == "lat_avg_ms":
             winner = data[metric].idxmin()
             loser = data[metric].idxmax()
@@ -199,35 +199,28 @@ def visualize_metrics(df, plot_dir=PLOT_DIR):
             for idx in data.index
         ]
 
-        bars = plt.bar(data.index, data[metric], color=colors)
+        # Plot bars above grid
+        bars = plt.bar(data.index, data[metric], color=colors, zorder=3)
         plt.title(f"{title} Comparison", pad=16)
         plt.ylabel(ylabel)
         plt.yscale(scale)
+
         plt.xticks(rotation=45, ha="right")
 
-        # Set y-axis limits properly and add more ticks for memory (log scale)
+        # Adjust y-limits and ticks
         if scale == "log":
             min_val = data[metric].min()
+            max_val = data[metric].max()
             bottom_limit = min_val / 10 if min_val > 0 else 1e-3
             plt.ylim(bottom=bottom_limit)
-
-            # Add more ticks on log scale for memory plots
-            ax = plt.gca()
-            # Use LogLocator with base 10 and subs for minor ticks (e.g., 1-9)
-            ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0))
-            ax.yaxis.set_minor_locator(
-                ticker.LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=10)
+            ticks = np.logspace(
+                np.floor(np.log10(bottom_limit)), np.ceil(np.log10(max_val)), num=6
             )
-            ax.yaxis.set_minor_formatter(
-                ticker.NullFormatter()
-            )  # Hide minor tick labels
-            ax.tick_params(
-                axis="y", which="minor", length=4
-            )  # Show minor ticks with smaller length
-
+            plt.yticks(ticks, [f"{t:.1f}" for t in ticks])
         else:
             plt.ylim(bottom=0)
 
+        # Annotate bars
         for bar in bars:
             h = bar.get_height()
             plt.annotate(
@@ -237,6 +230,7 @@ def visualize_metrics(df, plot_dir=PLOT_DIR):
                 textcoords="offset points",
                 ha="center",
                 va="bottom",
+                zorder=4,
             )
 
         plt.tight_layout()

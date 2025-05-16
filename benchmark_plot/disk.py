@@ -14,8 +14,6 @@ NORD_SHARED = "#81A1C1"  # Nord 10
 NORD_CONTAINER = "#5E81AC"  # Nord 11
 NORD_VM = "#B48EAD"  # Nord 15
 
-plt.style.use("ggplot")  # Base style; custom colors applied manually where needed
-
 
 def sanitize_filename(s):
     valid = f"{string.ascii_letters}{string.digits}"

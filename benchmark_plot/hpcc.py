@@ -132,6 +132,7 @@ def generate_metric_plots(df, metric_groups, out_dir, dpi=200):
                 ax.text(
                     bar.get_x() + bar.get_width() / 2, v * 1.01, f"{v:.3g}", ha="center"
                 )
+            ax.grid(linestyle="--", alpha=0.5, zorder=0)
             ax.set_title(metric.replace("_", " "), color=NORD_FG)
             ax.set_ylabel(metric.split("_")[-1], color=NORD_FG)
             ax.tick_params(axis="x", rotation=45, colors=NORD_FG)

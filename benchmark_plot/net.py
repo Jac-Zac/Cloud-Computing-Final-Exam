@@ -5,14 +5,11 @@ import re
 import matplotlib.pyplot as plt
 import pandas as pd
 
-plt.style.use("ggplot")
-
 # Nord palette colors for elements only (no background change)
 NORD_RED = "#BF616A"
 NORD_GREEN = "#A3BE8C"
 NORD_YELLOW = "#EBCB8B"
 NORD_BLUE = "#81A1C1"
-NORD_GREY = "#4C566A"
 NORD_FG = "#2E3440"  # Use for text (dark)
 
 # threshold (Gbits/sec) to distinguish high-speed vs low-speed
@@ -119,7 +116,7 @@ if __name__ == "__main__":
 
         x = range(len(envs))
         # Use Nord palette for bars cycling through colors
-        colors = [NORD_GREEN, NORD_BLUE, NORD_YELLOW, NORD_RED, NORD_GREY]
+        colors = [NORD_GREEN, NORD_BLUE, NORD_YELLOW, NORD_RED]
         bars = ax.bar(
             x, vals, tick_label=envs, color=[colors[i % len(colors)] for i in x]
         )
@@ -140,7 +137,7 @@ if __name__ == "__main__":
         ax.set_ylabel("Gbits/sec", color=NORD_FG)
         plt.xticks(rotation=30, ha="right", color=NORD_FG)
         plt.yticks(color=NORD_FG)
-        ax.grid(color=NORD_GREY, linestyle="--", alpha=0.5)
+        ax.grid(linestyle="--", alpha=0.5)
         plt.tight_layout()
         plt.savefig(os.path.join(out_dir, fname), dpi=300)
         plt.close()
@@ -150,7 +147,7 @@ if __name__ == "__main__":
             return
         fig, ax = plt.subplots(figsize=(10, 6))
 
-        colors = [NORD_GREEN, NORD_BLUE, NORD_YELLOW, NORD_RED, NORD_GREY]
+        colors = [NORD_GREEN, NORD_BLUE, NORD_YELLOW, NORD_RED]
         for i, lbl in enumerate(envs):
             times, rates = time_series[lbl]
             ax.plot(
@@ -167,8 +164,8 @@ if __name__ == "__main__":
         ax.set_title(title, fontsize=14, weight="bold", color=NORD_FG)
         ax.set_xlabel("Time (s)", color=NORD_FG)
         ax.set_ylabel("Gbits/sec", color=NORD_FG)
-        ax.grid(True, color=NORD_GREY, linestyle="--", alpha=0.5)
-        ax.legend(facecolor="white", edgecolor=NORD_GREY, labelcolor=NORD_FG)
+        ax.grid(True, linestyle="--", alpha=0.5)
+        ax.legend(facecolor="white", labelcolor=NORD_FG)
         plt.xticks(color=NORD_FG)
         plt.yticks(color=NORD_FG)
         plt.tight_layout()
@@ -185,7 +182,7 @@ if __name__ == "__main__":
 
     pos = list(range(len(df)))
     data = [latency_series[lbl] for lbl in df.index]
-    boxprops = dict(facecolor=NORD_BLUE, color=NORD_GREY)
+    boxprops = dict(facecolor=NORD_BLUE)
     medianprops = dict(color=NORD_RED, linewidth=2)
     ax.boxplot(
         data,
