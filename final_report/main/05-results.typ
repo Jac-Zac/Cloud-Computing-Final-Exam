@@ -1,9 +1,9 @@
 #import "@preview/hei-synd-report:0.1.1": *
 #import "/metadata.typ": *
 
-= Results
+= Benchmark results
 
-== HPL test Results
+== HPL Benchmark Results
 
 #figure(
   image("/resources/img/hpcc/hpl_scaling.png"),
@@ -96,7 +96,7 @@ Docker containers with named volumes offer vastly superior shared storage perfor
 
 The figure above compares random write throughput for virtual machines (VMs) and containers, both with local and shared storage, across a range of file and record sizes.
 
-We observe that **containers consistently deliver higher and more stable random write performance than VMs**, regardless of whether local or shared storage is used. This stability is particularly noticeable across varying file sizes, where containers exhibit less fluctuation in throughput.
+We observe that _containers consistently deliver higher and more stable random write performance than VMs_, regardless of whether local or shared storage is used. This stability is particularly noticeable across varying file sizes, where containers exhibit less fluctuation in throughput.
 
 #infobox()[
   For workloads sensitive to random write performance, containers provide a clear advantage over VMs, both in terms of absolute throughput and consistency across different I/O patterns. 

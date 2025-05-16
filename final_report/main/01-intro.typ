@@ -35,15 +35,14 @@ The host computer has the following specifications:
 - VBoxManage --version 7.1.8r168469
 -  Docker version 28.1.1, build 4eba377327
 
-== Scope
+== Project Scope
 
-This report focuses on:
+*This report focuses on:*
+
 - Documenting the setup process for both virtualised and containerized clusters
 - Presenting benchmark results for each test case
 - Analyzing and comparing the outcomes across environments
 
+#todobox()[
 The full set of benchmark data and scripts used in this analysis is available on #link("https://github.com/Jac-Zac/Cloud-Computing-Final-Exam")[GitHub], with custom README.md for each essentially each part of the process.
-
-== Future Improvements
-
-// TODO: Add academic references and formal citations for benchmarking tools used.
+]

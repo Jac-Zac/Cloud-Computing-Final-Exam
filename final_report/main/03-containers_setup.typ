@@ -33,7 +33,7 @@ chmod +x entrypoint.sh
 2. Build and Start the Cluster through the use of Docker Compose
 
 
-#infobox()[
+#warningbox()[
 Each node has a limit of 2 CPU cores. However, core pinning for Docker containers using the `--cpuset-cpus` option is not very effective considering the virtualisation layer in between.
 ]
 

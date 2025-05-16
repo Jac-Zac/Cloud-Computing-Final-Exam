@@ -91,13 +91,13 @@ Thanks to this configuration, the work was tested on different problem sizes and
 
 In order to complement the HPL results, `sysbench` was used to benchmark the single-node CPU performance. Though this method lacks distributed execution support, the script was done in parallel on all nodes to showcase a more realistic cluster stress test.
 
-We can very the script is distributing correctly and see the version with the following commands
+We can verify the script is distributing correctly and see the version with the following commands
 
 ```bash
 mpirun.openmpi -np 3 -hostfile mpi-hostfile sysbench --version
 ```
 
-The next step was to perform a test of the *CPU*. It was done leveraging a custom script made to test different parts of the cluster.
+The next phase involves conducting comprehensive *CPU* tests. For this purpose, a custom script was developed to evaluate various components of the cluster. 
 The script can be found on #link("https://github.com/Jac-Zac/Cloud-Computing-Final-Exam/blob/main/Containers/Performance_Testing/run-all.sh")[this github directory]
 
 *It Contain tests such as the following:*
