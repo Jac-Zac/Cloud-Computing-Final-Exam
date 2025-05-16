@@ -1,0 +1,7 @@
+Environment,Avg Bandwidth (Gbits/sec),Avg Latency (ms)
+node_master (container),127.21875,0.113
+node_node (container),125.6875,0.12388
+master_node (container),126.03125,0.1134
+node_master (vm),3.0321875,0.2607
+node_node (vm),2.9096875,0.3286
+master_node (vm),2.9353125,0.30760000000000004

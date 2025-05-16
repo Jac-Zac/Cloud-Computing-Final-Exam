@@ -7,6 +7,14 @@ import pandas as pd
 
 plt.style.use("ggplot")
 
+# Nord palette colors for elements only (no background change)
+NORD_RED = "#BF616A"
+NORD_GREEN = "#A3BE8C"
+NORD_YELLOW = "#EBCB8B"
+NORD_BLUE = "#81A1C1"
+NORD_GREY = "#4C566A"
+NORD_FG = "#2E3440"  # Use for text (dark)
+
 # threshold (Gbits/sec) to distinguish high-speed vs low-speed
 BW_THRESHOLD = 70.0
 
@@ -108,8 +116,14 @@ if __name__ == "__main__":
             return
         vals = df.loc[envs, "Avg Bandwidth (Gbits/sec)"]
         fig, ax = plt.subplots(figsize=(8, 5))
+
         x = range(len(envs))
-        bars = ax.bar(x, vals, tick_label=envs, color=plt.cm.Set2.colors[: len(envs)])
+        # Use Nord palette for bars cycling through colors
+        colors = [NORD_GREEN, NORD_BLUE, NORD_YELLOW, NORD_RED, NORD_GREY]
+        bars = ax.bar(
+            x, vals, tick_label=envs, color=[colors[i % len(colors)] for i in x]
+        )
+
         for b in bars:
             h = b.get_height()
             ax.annotate(
@@ -118,11 +132,15 @@ if __name__ == "__main__":
                 xytext=(0, 5),
                 textcoords="offset points",
                 ha="center",
+                color=NORD_FG,
+                fontsize=9,
+                weight="bold",
             )
-        ax.set_title(title, fontsize=14, weight="bold")
-        ax.set_ylabel("Gbits/sec")
-        ax.grid(axis="y", linestyle="--", alpha=0.7)
-        plt.xticks(rotation=30, ha="right")
+        ax.set_title(title, fontsize=14, weight="bold", color=NORD_FG)
+        ax.set_ylabel("Gbits/sec", color=NORD_FG)
+        plt.xticks(rotation=30, ha="right", color=NORD_FG)
+        plt.yticks(color=NORD_FG)
+        ax.grid(color=NORD_GREY, linestyle="--", alpha=0.5)
         plt.tight_layout()
         plt.savefig(os.path.join(out_dir, fname))
         plt.close()
@@ -131,14 +149,28 @@ if __name__ == "__main__":
         if not envs:
             return
         fig, ax = plt.subplots(figsize=(10, 6))
-        for lbl in envs:
+
+        colors = [NORD_GREEN, NORD_BLUE, NORD_YELLOW, NORD_RED, NORD_GREY]
+        for i, lbl in enumerate(envs):
             times, rates = time_series[lbl]
-            ax.plot(times, rates, marker="o", linestyle="-", label=lbl)
-        ax.set_title(title, fontsize=14, weight="bold")
-        ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Gbits/sec")
-        ax.grid(True, linestyle="--", alpha=0.6)
-        plt.legend()
+            ax.plot(
+                times,
+                rates,
+                marker="o",
+                linestyle="-",
+                label=lbl,
+                color=colors[i % len(colors)],
+                alpha=0.85,
+                linewidth=2,
+                markersize=5,
+            )
+        ax.set_title(title, fontsize=14, weight="bold", color=NORD_FG)
+        ax.set_xlabel("Time (s)", color=NORD_FG)
+        ax.set_ylabel("Gbits/sec", color=NORD_FG)
+        ax.grid(True, color=NORD_GREY, linestyle="--", alpha=0.5)
+        ax.legend(facecolor="white", edgecolor=NORD_GREY, labelcolor=NORD_FG)
+        plt.xticks(color=NORD_FG)
+        plt.yticks(color=NORD_FG)
         plt.tight_layout()
         plt.savefig(os.path.join(out_dir, fname))
         plt.close()
@@ -150,20 +182,23 @@ if __name__ == "__main__":
 
     # Combined latency boxplot
     fig, ax = plt.subplots(figsize=(8, 5))
+
     pos = list(range(len(df)))
     data = [latency_series[lbl] for lbl in df.index]
+    boxprops = dict(facecolor=NORD_BLUE, color=NORD_GREY)
+    medianprops = dict(color=NORD_RED, linewidth=2)
     ax.boxplot(
         data,
         positions=pos,
         patch_artist=True,
-        boxprops=dict(facecolor="lightblue", color="gray"),
-        medianprops=dict(color="red"),
+        boxprops=boxprops,
+        medianprops=medianprops,
     )
-    ax.set_title("Ping Latency Distribution", fontsize=14, weight="bold")
-    ax.set_ylabel("Latency (ms)")
+
+    ax.set_title("Ping Latency Distribution", fontsize=14, weight="bold", color=NORD_FG)
+    ax.set_ylabel("Latency (ms)", color=NORD_FG)
     ax.set_xticks(pos)
-    ax.set_xticklabels(df.index, rotation=30, ha="right")
-    ax.grid(axis="y", linestyle="--", alpha=0.7)
+    ax.set_xticklabels(df.index, rotation=30, ha="right", color=NORD_FG)
     plt.tight_layout()
     plt.savefig(os.path.join(out_dir, "latency_boxplot.png"))
     plt.close()

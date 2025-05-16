@@ -1,46 +1,44 @@
 #!/usr/bin/env python3
 import os
 import re
-from datetime import datetime
 
 import matplotlib.pyplot as plt
+import numpy as _np
 import numpy as np
 import pandas as pd
-import seaborn as sns
+
+# Normalize axes into a 1D array called axes_flat
+
+
+# Nord palette (elements only)
+NORD_FG = "#2E3440"  # dark text/lines
+NORD_GREEN = "#A3BE8C"  # winners
+NORD_RED = "#BF616A"  # losers
+NORD_GRAY = "#4C566A"  # neutrals
 
 # Constants
 OUT_DIR = "plots/hpcc"
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# Direct paths to hpccoutf.txt files
 HPCC_FILES = {
     "vms": "../results/vms/hpccoutf.txt",
     "containers": "../results/containers/hpccoutf.txt",
 }
 
-# Define the most important metrics to extract (reduced list, focusing on key metrics)
 IMPORTANT_METRICS = [
-    # HPL (High Performance Linpack)
     "HPL_Tflops",
-    # DGEMM (Dense Matrix-Matrix Multiplication)
     "StarDGEMM_Gflops",
-    # STREAM (Memory Bandwidth) - only Triad operations
     "StarSTREAM_Triad",
     "SingleSTREAM_Triad",
-    # RandomAccess - only main GUPs metrics
     "StarRandomAccess_GUPs",
     "SingleRandomAccess_GUPs",
-    # FFT (Fast Fourier Transform)
     "StarFFT_Gflops",
     "SingleFFT_Gflops",
-    # Communication metrics - only average values
     "AvgPingPongLatency_usec",
     "AvgPingPongBandwidth_GBytes",
-    # PTRANS (Parallel Matrix Transpose)
     "PTRANS_GBs",
 ]
 
-# Configuration metrics to extract
 CONFIG_METRICS = [
     "HPL_N",
     "HPL_NB",
@@ -54,69 +52,45 @@ CONFIG_METRICS = [
 
 
 def extract_timestamp(lines):
-    """Extract the test timestamp from the HPCC output file."""
     for line in lines:
         if "Current time" in line:
-            match = re.search(r"Current time \(\d+\) is (.+)", line)
-            if match:
-                return match.group(1).strip()
+            m = re.search(r"Current time \(\d+\) is (.+)", line)
+            if m:
+                return m.group(1).strip()
     return "Unknown"
 
 
 def parse_hpcc_output(lines):
-    """
-    Parse the entire HPCC output file to extract metrics and configuration.
-    Returns a dict of metric_name -> value.
-    """
     metrics = {}
     text = "\n".join(lines)
-
-    # First extract all metrics from the Summary section
-    summary_start = text.find("Begin of Summary section.")
-    summary_end = text.find("End of Summary section.")
-
-    if summary_start > 0 and summary_end > summary_start:
-        summary_text = text[summary_start:summary_end]
-
-        # Extract all metrics with pattern key=value
-        for line in summary_text.splitlines():
-            if "=" in line:
-                key, value = line.split("=", 1)
-                key = key.strip()
-                value = value.strip()
+    # Summary section
+    ss = text.find("Begin of Summary section.")
+    se = text.find("End of Summary section.")
+    if ss > 0 and se > ss:
+        for l in text[ss:se].splitlines():
+            if "=" in l:
+                k, v = l.split("=", 1)
+                k, v = k.strip(), v.strip()
                 try:
-                    # Try to convert to float if possible
-                    metrics[key] = float(value)
-                except ValueError:
-                    # Otherwise keep as string
-                    metrics[key] = value
-
-    # Extract the test timestamp
+                    metrics[k] = float(v)
+                except:
+                    metrics[k] = v
     metrics["Timestamp"] = extract_timestamp(lines)
 
-    # Extract HPL best performance directly from the output
-    hpl_section = re.search(r"End of HPL section", text)
-    if hpl_section:
-        hpl_pos = text[: hpl_section.start()].rfind("T/V")
-        if hpl_pos > 0:
-            hpl_chunk = text[hpl_pos : hpl_section.start()]
-            best_gflops = 0
-            for line in hpl_chunk.splitlines():
-                if "WR11C2R4" in line:
-                    try:
-                        gflops_match = re.search(r"(\d+\.\d+)e\+(\d+)", line)
-                        if gflops_match:
-                            base = float(gflops_match.group(1))
-                            exp = int(gflops_match.group(2))
-                            gflops = base * (10**exp)
-                            if gflops > best_gflops:
-                                best_gflops = gflops
-                    except:
-                        pass
-            if best_gflops > 0:
-                metrics["HPL_Best_Gflops"] = best_gflops
-                metrics["HPL_Best_Tflops"] = best_gflops / 1000
-
+    # HPL best
+    m = re.search(r"End of HPL section", text)
+    if m:
+        snippet = text[: m.start()]
+        best = 0
+        for l in snippet.splitlines():
+            if "WR11C2R4" in l:
+                g = re.search(r"(\d+\.\d+)e\+(\d+)", l)
+                if g:
+                    val = float(g.group(1)) * 10 ** int(g.group(2))
+                    best = max(best, val)
+        if best:
+            metrics["HPL_Best_Gflops"] = best
+            metrics["HPL_Best_Tflops"] = best / 1000
     return metrics
 
 
@@ -150,7 +124,11 @@ def generate_metric_plots(df, metric_groups, out_dir):
             squeeze=False,  # Ensure axes is always a 2D array
         )
 
-        # Flatten the axes array for easy iteration
+        # Normalize axes into a 1D array called axes_flat
+        import numpy as _np
+
+        if not isinstance(axes, _np.ndarray):
+            axes = _np.array([[axes]])
         axes_flat = axes.flatten()
 
         # Plot each metric
@@ -173,24 +151,23 @@ def generate_metric_plots(df, metric_groups, out_dir):
 
             # Determine winner and loser based on metric
             if metric in lower_is_better:
-                winner_idx = np.argmin(values)
-                loser_idx = np.argmax(values)
+                winner_idx = _np.argmin(values)
+                loser_idx = _np.argmax(values)
             else:
-                winner_idx = np.argmax(values)
-                loser_idx = np.argmin(values)
+                winner_idx = _np.argmax(values)
+                loser_idx = _np.argmin(values)
 
-            # Create color list - winner green, loser red, others neutral
-            colors = ["#d9d9d9"] * len(systems)  # Default neutral color
-            colors[winner_idx] = "#4daf4a"  # Green for winner
-            colors[loser_idx] = "#e41a1c"  # Red for loser
+            # Create color list - winner green, loser red, others neutral (Nord palette)
+            colors = [NORD_GRAY] * len(systems)  # Default neutral color
+            colors[winner_idx] = NORD_GREEN  # Green for winner
+            colors[loser_idx] = NORD_RED  # Red for loser
 
             # If only two systems, just use green and red
             if len(systems) == 2:
-                colors = (
-                    ["#4daf4a", "#e41a1c"]
-                    if winner_idx == 0
-                    else ["#e41a1c", "#4daf4a"]
-                )
+                if winner_idx == 0:
+                    colors = [NORD_GREEN, NORD_RED]
+                else:
+                    colors = [NORD_RED, NORD_GREEN]
 
             # Create the bar chart
             bars = ax.bar(systems, values, color=colors)
@@ -238,177 +215,120 @@ def generate_metric_plots(df, metric_groups, out_dir):
         print(f"📊 Plot saved: {fig_path}")
 
 
-import os
-
-import matplotlib.pyplot as plt
-import pandas as pd
-
-
-def generate_value_matrix_plot(df, important_metrics, out_dir):
-    """Generate a matrix plot of raw values, coloring best=green, worst=red."""
-    # Filter to metrics present in df
-    metrics = [m for m in important_metrics if m in df.columns]
-    if not metrics:
-        print("⚠️ No important metrics found in dataframe.")
+def generate_value_matrix_plot(df, metrics, out_dir):
+    mets = [m for m in metrics if m in df.columns]
+    if not mets:
+        print("⚠️ No important metrics")
         return
 
-    # Build a DataFrame: rows=metrics, cols=systems
-    mat = df.set_index("System")[metrics].T  # now: index=metrics, columns=systems
-
-    # Define which metrics are 'lower is better'
-    lower_is_better = {
+    mat = df.set_index("System")[mets].T
+    lower_better = {
         "AvgPingPongLatency_usec",
         "MinPingPongLatency_usec",
         "MaxPingPongLatency_usec",
         "PTRANS_time",
     }
 
-    # Prepare a color matrix
-    green, red, white = "#4daf4a", "#e41a1c", "#ffffff"
+    green, red, gray = NORD_GREEN, NORD_RED, NORD_GRAY
     cell_colors = []
-    for metric in mat.index:
-        row = mat.loc[metric]
-        # pick winner/loser idx
-        if metric in lower_is_better:
-            winner = row.idxmin()
-            loser = row.idxmax()
+    for m in mat.index:
+        row = mat.loc[m]
+        if m in lower_better:
+            w, l = row.idxmin(), row.idxmax()
         else:
-            winner = row.idxmax()
-            loser = row.idxmin()
+            w, l = row.idxmax(), row.idxmin()
+        row_colors = [green if s == w else red if s == l else gray for s in mat.columns]
+        cell_colors.append(row_colors)
 
-        # build color list for this row
-        colors = []
-        for sys in mat.columns:
-            if sys == winner:
-                colors.append(green)
-            elif sys == loser:
-                colors.append(red)
-            else:
-                colors.append(white)
-        cell_colors.append(colors)
-
-    # Plot the table
     fig, ax = plt.subplots(
         figsize=(1.5 * len(mat.columns) + 2, 0.5 * len(mat.index) + 2)
     )
     ax.axis("off")
-
     table = ax.table(
         cellText=mat.values,
         rowLabels=[m.replace("_", " ") for m in mat.index],
         colLabels=mat.columns,
         cellLoc="center",
         cellColours=cell_colors,
-        rowLoc="center",
-        colLoc="center",
         loc="center",
     )
     table.auto_set_font_size(False)
     table.set_fontsize(9)
     table.scale(1, 1.3)
+    for (r, c), cell in table.get_celld().items():
+        cell.get_text().set_color(NORD_FG)
+        cell.set_edgecolor(NORD_GRAY)
 
     plt.tight_layout()
-    out_path = os.path.join(out_dir, "performance_value_matrix.png")
-    plt.savefig(out_path, dpi=100, bbox_inches="tight")
+    path = os.path.join(out_dir, "performance_value_matrix.png")
+    plt.savefig(path, dpi=100)
     plt.close(fig)
-    print(f"📊 Value‐matrix performance comparison saved: {out_path}")
+    print(f"📊 Saved {path}")
 
 
-def save_configuration_info(df, config_metrics, out_dir):
-    """Save the system configuration information to a file."""
-    # Filter config metrics that exist in the dataframe
-    available_configs = [m for m in config_metrics if m in df.columns]
-
-    if not available_configs:
-        print("⚠️ No configuration data available")
+def save_configuration_info(df, configs, out_dir):
+    avail = [m for m in configs if m in df.columns]
+    if not avail:
+        print("⚠️ No config data")
         return
 
-    # Create a configuration table
-    config_df = df[["System"] + available_configs]
+    cfg = df[["System"] + avail]
+    csv = os.path.join(out_dir, "hpcc_config.csv")
+    cfg.to_csv(csv, index=False)
+    print(f"📄 Saved {csv}")
 
-    # Save to CSV
-    csv_path = os.path.join(out_dir, "hpcc_config.csv")
-    config_df.to_csv(csv_path, index=False)
-    print(f"📄 Config saved to: {csv_path}")
-
-    # Create a visual table
-    fig, ax = plt.subplots(figsize=(10, len(available_configs) * 0.25 + 1))
-    ax.axis("tight")
+    fig, ax = plt.subplots(figsize=(10, len(avail) * 0.25 + 1))
     ax.axis("off")
-    table = ax.table(
-        cellText=config_df.values,
-        colLabels=config_df.columns,
-        cellLoc="center",
-        loc="center",
+    tbl = ax.table(
+        cellText=cfg.values, colLabels=cfg.columns, cellLoc="center", loc="center"
     )
-    table.auto_set_font_size(False)
-    table.set_fontsize(9)
-    table.scale(1, 1.3)
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(9)
+    tbl.scale(1, 1.3)
+    for key, cell in tbl.get_celld().items():
+        cell.get_text().set_color(NORD_FG)
+        cell.set_edgecolor(NORD_GRAY)
 
-    fig_path = os.path.join(out_dir, "system_config_table.png")
-    plt.savefig(fig_path, dpi=100, bbox_inches="tight")
-    plt.close()
-    print(f"📊 Config table saved: {fig_path}")
+    path = os.path.join(out_dir, "system_config_table.png")
+    plt.savefig(path, dpi=100)
+    plt.close(fig)
+    print(f"📊 Saved {path}")
 
 
 def main():
     rows = []
-
-    for system, path in HPCC_FILES.items():
-        if not os.path.isfile(path):
-            print(f"❌ File not found: {path}")
+    for sys, p in HPCC_FILES.items():
+        if not os.path.isfile(p):
+            print(f"❌ Missing: {p}")
             continue
-
-        print(f"Processing file: {path}")
-        with open(path) as f:
-            lines = f.readlines()
-
-        # Parse all metrics from the file
-        metrics = parse_hpcc_output(lines)
-        metrics["System"] = system
-        rows.append(metrics)
+        print(f"Processing {p}")
+        lines = open(p).read().splitlines()
+        m = parse_hpcc_output(lines)
+        m["System"] = sys
+        rows.append(m)
 
     if not rows:
-        raise SystemExit("❌ No valid HPCC logs found.")
+        raise SystemExit("❌ No logs")
 
-    # Create dataframe with all metrics
     df = pd.DataFrame(rows)
+    df.to_csv(os.path.join(OUT_DIR, "hpcc_full_results.csv"), index=False)
+    print("📄 Full results saved")
 
-    # Save full results to CSV
-    csv_path = os.path.join(OUT_DIR, "hpcc_full_results.csv")
-    df.to_csv(csv_path, index=False)
-    print(f"📄 HPCC results saved to: {csv_path}")
-
-    # Define simplified groups of related metrics for plotting
     metric_groups = {
         "HPL Performance": ["HPL_Tflops", "HPL_Best_Tflops"],
         "Matrix Operations": ["StarDGEMM_Gflops", "SingleDGEMM_Gflops"],
-        "Memory Bandwidth": [
-            "StarSTREAM_Triad",
-            "SingleSTREAM_Triad",
-        ],
-        "RandomAccess": [
-            "StarRandomAccess_GUPs",
-            "SingleRandomAccess_GUPs",
-        ],
+        "Memory Bandwidth": ["StarSTREAM_Triad", "SingleSTREAM_Triad"],
+        "RandomAccess": ["StarRandomAccess_GUPs", "SingleRandomAccess_GUPs"],
         "FFT Performance": ["StarFFT_Gflops", "SingleFFT_Gflops"],
-        "Communication": [
-            "AvgPingPongLatency_usec",
-            "AvgPingPongBandwidth_GBytes",
-        ],
+        "Communication": ["AvgPingPongLatency_usec", "AvgPingPongBandwidth_GBytes"],
         "PTRANS": ["PTRANS_GBs"],
     }
 
-    # Generate plots for each metric group
     generate_metric_plots(df, metric_groups, OUT_DIR)
-
-    # Generate a combined performance plot
     generate_value_matrix_plot(df, IMPORTANT_METRICS, OUT_DIR)
-
-    # Save configuration information
     save_configuration_info(df, CONFIG_METRICS, OUT_DIR)
 
-    print(f"✅ Analysis complete. All results saved to {OUT_DIR}")
+    print(f"✅ Done — all outputs in {OUT_DIR}")
 
 
 if __name__ == "__main__":

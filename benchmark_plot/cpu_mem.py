@@ -125,11 +125,10 @@ def discover_logs(base_dir):
 
 
 def visualize_metrics(df, plot_dir=PLOT_DIR):
-    """Generate comparison plots organized by metric type (excluding 'host')"""
-    # Create base plot directory
-    os.makedirs(plot_dir, exist_ok=True)
+    """Generate comparison plots, excluding host from CPU charts."""
+    import numpy as np
 
-    # Create subdirectories
+    os.makedirs(plot_dir, exist_ok=True)
     cpu_dir = os.path.join(plot_dir, "cpu")
     mem_dir = os.path.join(plot_dir, "memory")
     os.makedirs(cpu_dir, exist_ok=True)
@@ -137,7 +136,10 @@ def visualize_metrics(df, plot_dir=PLOT_DIR):
 
     plt.style.use("ggplot")
 
-    # Categorize metrics with their destinations
+    NORD_GREEN = "#A3BE8C"
+    NORD_RED = "#BF616A"
+    NORD_GREY = "#808080"
+
     metrics = {
         "events_per_sec": (
             "CPU Performance",
@@ -145,38 +147,68 @@ def visualize_metrics(df, plot_dir=PLOT_DIR):
             "linear",
             "events/s",
             cpu_dir,
+            "_cpu",
         ),
-        "lat_avg_ms": ("Latency", "Average latency (ms)", "linear", "ms", cpu_dir),
-        "mem_mb_sec": ("Memory Throughput", "MB/s", "log", "MB/s", mem_dir),
+        "lat_avg_ms": (
+            "Latency",
+            "Average latency (ms)",
+            "linear",
+            "ms",
+            cpu_dir,
+            "_cpu",
+        ),
+        "mem_mb_sec": (
+            "Memory Throughput",
+            "MB/s",
+            "log",
+            "MB/s",
+            mem_dir,
+            "_mem",
+        ),
         "bogo_ops_per_sec": (
             "Stress-ng Memory Performance",
-            "Bogo Operations/s",
+            "Bogo operations/s",
             "log",
             "bogo ops/s",
             mem_dir,
+            "_mem",
         ),
     }
 
-    for metric, (title, ylabel, scale, unit, dest_dir) in metrics.items():
-        # Filter to include only vms and containers
-        data = df.loc[df.index.str.contains("vms|containers")].dropna(subset=[metric])
+    for metric, (title, ylabel, scale, unit, dest_dir, suffix) in metrics.items():
+        # Filter to correct suffix, drop host and NaNs
+        filt = df.index.str.endswith(suffix) & ~df.index.str.startswith("host")
+        data = df[filt].dropna(subset=[metric]).sort_index()
+
         if data.empty:
-            print(f"Skipping {metric} - no data")
+            print(f"Skipping {metric} – no data for {suffix} logs")
             continue
 
         plt.figure(figsize=(10, 6))
-        bars = plt.bar(data.index, data[metric], color=plt.cm.tab20.colors)
-        plt.title(f"{title} Comparison", pad=20)
+
+        if metric == "lat_avg_ms":
+            winner = data[metric].idxmin()
+            loser = data[metric].idxmax()
+        else:
+            winner = data[metric].idxmax()
+            loser = data[metric].idxmin()
+
+        colors = [
+            NORD_GREEN if idx == winner else NORD_RED if idx == loser else NORD_GREY
+            for idx in data.index
+        ]
+
+        bars = plt.bar(data.index, data[metric], color=colors)
+        plt.title(f"{title} Comparison", pad=16)
         plt.ylabel(ylabel)
         plt.yscale(scale)
         plt.xticks(rotation=45, ha="right")
 
-        # Add value annotations
         for bar in bars:
-            height = bar.get_height()
+            h = bar.get_height()
             plt.annotate(
-                f"{height:.1f} {unit}",
-                xy=(bar.get_x() + bar.get_width() / 2, height),
+                f"{h:.1f} {unit}",
+                xy=(bar.get_x() + bar.get_width() / 2, h),
                 xytext=(0, 3),
                 textcoords="offset points",
                 ha="center",
@@ -184,10 +216,10 @@ def visualize_metrics(df, plot_dir=PLOT_DIR):
             )
 
         plt.tight_layout()
-        plot_path = os.path.join(dest_dir, f"{metric}_comparison.png")
-        plt.savefig(plot_path, dpi=150)
+        outpath = os.path.join(dest_dir, f"{metric}_comparison.png")
+        plt.savefig(outpath, dpi=150)
         plt.close()
-        print(f"Saved {metric} plot: {plot_path}")
+        print(f"Saved {metric} plot: {outpath}")
 
 
 def main():
