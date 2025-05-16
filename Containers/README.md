@@ -24,8 +24,8 @@ This project sets up a lightweight HPC-like environment using Docker containers,
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
-cd <repo-directory>
+git clone https://github.com/Jac-Zac/Cloud-Computing-Final-Exam
+cd Cloud-Computing-Final-Exam/Containers
 ```
 
 ### 2. Make `entrypoint.sh` executable

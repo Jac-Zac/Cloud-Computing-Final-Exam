@@ -4,16 +4,19 @@
 
 = Virtual Machine Cluster Setup
 
-What follows are the steps to set up and network the virtual machines on which we will later conduct performance tests. 
-For this, we setup VirtualBox. The tutorial #footnote()[https://github.com/Foundations-of-HPC/Cloud-basic-2024/blob/main/Tutorials/VirtualMachine/README.md] referenced throughout this section was instrumental in guiding the process.
+What follows are the steps to set up and network the virtual machines on which we will later conduct performance testing.
 
-This modified guide walks through setting up a VM cluster for cloud environment testing, with I used to perform the test. 
+#infobox()[
+  For this, we setup VirtualBox. The tutorial #footnote()[https://github.com/Foundations-of-HPC/Cloud-basic-2024/blob/main/Tutorials/VirtualMachine/README.md] referenced throughout this section was instrumental in guiding the process.
+]
+
+This modified guide walks through setting up a VM cluster for cloud environment testing, which I used to perform the test. 
 
 == Setting Up the Template VM
 
 1. Create a new virtual machine in VirtualBox by clicking on _Machine > New_.
-2. Enter the template as the name for the VM, select the storage directory on the host, and choose the Ubuntu 24.04.1 amd64 server ISO image.
-3. Skip the unattended installation process, as it may cause issues.
+2. Enter the template as the name for the VM, select the storage directory on the host, and choose the Ubuntu 24.04.1 amd64 (since I'm on an apple silicon mac_book) server ISO image.
+3. Skip the unattended installation process, as it may cause issues (or if you use it then you have at least to install OpenSSH).
 4. Configure hardware, the settings used in this case are: *2GB RAM and 2 CPU* (adjust based on host capabilities).
 5. Set the virtual hard disk size to 20GB.
 
@@ -25,12 +28,10 @@ After configuring the Virtual Machine, start it and follow the installation wiza
 3. Leave the network configuration at its default for now; we will adjust this later.
 4. Leave the proxy address blank.
 5. Select a suitable mirror address; the installer will test options.
-6. For storage, use the "entire disk" option and enable _LVM group_ setup.
+6. For storage, use the "entire disk".
 7. Set up the user profile (e.g., username: user01, server name: template).
-8. Skip Ubuntu Pro registration.
-9. Enable the OpenSSH server for remote access.
-10. Skip additional suggested packages.
-11. Complete the installation, then shut down the VM and remove the ISO image.
+8. Enable the OpenSSH server for remote access.
+9. Complete the installation, then shut down the VM and remove the ISO image.
 
 === Configuring the Template
 
@@ -47,16 +48,15 @@ It is important to install two additional packages, this can be done with this c
 sudo apt install net-tools gcc make
 ```
 
-Finally, we have to shutdown the node with the following command: 
+Finally, we have to shutdown the node: 
 
 ```bash
 sudo shutdown -h now
 ```
 
-
 === Configure VirtualBox Internal Network
 
-Create a Host-Only network named "CloudBasicNet" with:
+Create a Host-Only network named "CloudBasicNet" with the following configuration:
 
 ```bash
 Mask: 255.255.255.0
@@ -64,16 +64,19 @@ Lower Bound: 192.168.56.2
 Upper Bound: 192.168.56.199
 ```
 
+_This will let us set the first ip address as the master ip address_
+
 == Configuring the entire cluster (with automated script)
 
 Due to many inconveniences and problems in the process of setting up the machines and for ease of use in the future, I have created a script to create the cluster.
-It can be found in the git repository #footnote()[https://github.com/Jac-Zac/Cloud-Computing-Final-Exam].
+It can be found in the git repository #footnote()[https://github.com/Jac-Zac/Cloud-Computing-Final-Exam/blob/main/VM_project/setup_node.sh].
 
-The `setup_node.sh` script automates the VM setup process for both master and worker nodes. It handles VM cloning, network configuration, SSH setup, and service configuration.
+The `setup_node.sh` script automates the VM setup process for both master and worker nodes. It handles VM cloning, network configuration, SSH setup, shared file-system, and service configuration.
 
 === Prerequisites
 
 - VirtualBox installed
+- #link("https://sourceforge.net/projects/sshpass/")[sshpass] to remove the need for interactive password prompts 
 - A template VM named `template` already created
 - *Configuration directories:*
 #infobox()[
@@ -116,8 +119,8 @@ You can specify the node name, SSH port, and password:
 )
 
 #ideabox()[
-  Note the script has been written in parallel incrementally when setting up the cluster and then refined at the end to improve it drastically.
-  It can now be easily used to completely recreate the environment from scratch which is actually what I have done in the end.
+ Note: The script has been written incrementally when setting up the cluster and then refined at the end to improve it drastically.
+  It can now be easily used to completely recreate the environment from scratch, which is actually what I have done to perform the benchmarks.
 ]
 
 === Access Pattern
@@ -143,7 +146,7 @@ An alternative set up is to build the cluster manually, more informations can be
 Which has been updated and now works without any changed to the DNS configuration.
 
 #infobox()[
-  Note that the following section showcases many commands that can be run through the terminal instead of interacting with the GUI. Those command are exactly what is being run under the hood in the automated script.
+  Note that the following section showcases many commands that can be run through the terminal instead of interacting with the VirtualBox GUI. Those command are exactly what is being run under the hood in the automated script.
 ]
 
 === Cloning VMs
@@ -153,7 +156,7 @@ VBoxManage clonevm "template" --name "master" --register --mode all
 VBoxManage clonevm "template" --name "node-01" --register --mode all
 ```
 
-List all your virtual machines with: `VBoxManage list vms`
+_List all your virtual machines with: `VBoxManage list vms`_
 
 === Network Configuration
 
@@ -173,6 +176,8 @@ VBoxManage modifyvm "master" --natpf1 "ssh,tcp,127.0.0.1,3022,,22"
 VBoxManage modifyvm "node-01" --natpf1 "ssh,tcp,127.0.0.1,4022,,22"
 ```
 
+This sets up port forwarding rules in VirtualBox NAT networking to forward SSH traffic from specific ports on the host (e.g., `3022`, `4022`) to port `22` (the default SSH port) on the guest VMs named *"master"* and *"node-01"*. 
+
 == Master Node Configuration
 
 === SSH Key Setup
@@ -187,13 +192,14 @@ ssh-copy-id -i ~/.ssh/id_ed25519.pub -p 3022 user01@127.0.0.1
 scp -P 3022 -r master_config user01@127.0.0.1:~
 ```
 
-Generate SSH key:
+Finally Generate SSH key for to then connect to the other nodes easily:
+
 ```bash
 ssh-keygen
 ```
 
 === Network Setup
-This setup can be done leveraging the configuration files that are inside the master_con fig directory which we moved to the node
+This setup can be done leveraging the configuration files that are inside the master_config directory which we moved to the node
 
 ```bash
 sudo cp ~/master_config/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml
@@ -246,7 +252,7 @@ Though I have added a way to fix the problem automatically inside *fix_dnsmasq_s
 
 === NFS Server Setup
 
-Setting up a shared file system is essential in our project. We can manually doing performing the following actions
+Setting up a shared file system is essential in our project. We can manually do it performing the following actions
 
 ```bash
 sudo apt install nfs-kernel-server -y
@@ -345,7 +351,7 @@ We can finalize the setup by creating a key on master and coping it to the share
 
 === Node Status Script
 
-Finally we can create/use the following script to check what nodes are running.
+Finally we can _create/use_ the following script to check what nodes are running.
 
 #figure(
   sourcecode(lang: "bash")[
