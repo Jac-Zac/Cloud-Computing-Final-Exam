@@ -2,6 +2,7 @@
 
 import os
 import re
+
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -63,14 +64,14 @@ def parse_log(path):
                 if match:
                     metrics["mem_mb_sec"].append(float(match.group(1)))
 
-            # Stress-ng metrics (updated pattern)
-            if "stress-ng: metrc:" in clean_line and "vm" in clean_line:
+            # Unified stress-ng pattern
+            if "stress-ng:" in clean_line and "vm" in clean_line:
                 match = re.search(
-                    r"vm\s+\d+\s+\d+\.\d+\s+\d+\.\d+\s+\d+\.\d+\s+(\d+\.\d+)",
+                    r"vm\s+(\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)",
                     clean_line,
                 )
                 if match:
-                    metrics["bogo_ops_per_sec"].append(float(match.group(1)))
+                    metrics["bogo_ops_per_sec"].append(float(match.group(5)))
 
     # Calculate averages for multi-value metrics
     return {
@@ -124,39 +125,46 @@ def discover_logs(base_dir):
 
 
 def visualize_metrics(df, plot_dir=PLOT_DIR):
-    """Generate comparison plots for all metrics"""
-    # Ensure plot directory exists
+    """Generate comparison plots organized by metric type (excluding 'host')"""
+    # Create base plot directory
     os.makedirs(plot_dir, exist_ok=True)
+
+    # Create subdirectories
+    cpu_dir = os.path.join(plot_dir, "cpu")
+    mem_dir = os.path.join(plot_dir, "memory")
+    os.makedirs(cpu_dir, exist_ok=True)
+    os.makedirs(mem_dir, exist_ok=True)
+
     plt.style.use("ggplot")
 
+    # Categorize metrics with their destinations
     metrics = {
         "events_per_sec": (
             "CPU Performance",
             "Events per second",
             "linear",
             "events/s",
+            cpu_dir,
         ),
-        "lat_avg_ms": ("Latency", "Average latency (ms)", "linear", "ms"),
-        "mem_mb_sec": ("Memory Throughput", "MB/s", "log", "MB/s"),
+        "lat_avg_ms": ("Latency", "Average latency (ms)", "linear", "ms", cpu_dir),
+        "mem_mb_sec": ("Memory Throughput", "MB/s", "log", "MB/s", mem_dir),
         "bogo_ops_per_sec": (
-            "Stress-ng Performance",
+            "Stress-ng Memory Performance",
             "Bogo Operations/s",
             "log",
             "bogo ops/s",
+            mem_dir,
         ),
     }
 
-    for metric, (title, ylabel, scale, unit) in metrics.items():
-        plt.figure(figsize=(10, 6))
-
-        # Filter and sort data
-        data = df.dropna(subset=[metric])
-        data = data.sort_values(metric, ascending=False)
-
+    for metric, (title, ylabel, scale, unit, dest_dir) in metrics.items():
+        # Filter to include only vms and containers
+        data = df.loc[df.index.str.contains("vms|containers")].dropna(subset=[metric])
         if data.empty:
             print(f"Skipping {metric} - no data")
             continue
 
+        plt.figure(figsize=(10, 6))
         bars = plt.bar(data.index, data[metric], color=plt.cm.tab20.colors)
         plt.title(f"{title} Comparison", pad=20)
         plt.ylabel(ylabel)
@@ -169,17 +177,17 @@ def visualize_metrics(df, plot_dir=PLOT_DIR):
             plt.annotate(
                 f"{height:.1f} {unit}",
                 xy=(bar.get_x() + bar.get_width() / 2, height),
-                xytext=(0, 3),  # 3 points vertical offset
+                xytext=(0, 3),
                 textcoords="offset points",
                 ha="center",
                 va="bottom",
             )
 
         plt.tight_layout()
-        plot_path = os.path.join(plot_dir, f"{metric}_comparison.png")
+        plot_path = os.path.join(dest_dir, f"{metric}_comparison.png")
         plt.savefig(plot_path, dpi=150)
         plt.close()
-        print(f"Saved plot: {plot_path}")
+        print(f"Saved {metric} plot: {plot_path}")
 
 
 def main():
