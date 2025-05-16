@@ -124,11 +124,3 @@ The provided `docker-compose.yml` correctly:
 ```bash
  mpirun.openmpi -mca btl_tcp_if_include enp0s9 -np 6 -hostfile mpi-hostfile hpcc
 ```
-
-Note that the output of iozone at least on the containers says this:
-
-```bash
-Timer resolution is poor. Some small transfers may have
-reported inaccurate results. Sizes 64 kBytes and below.
-root@986c6a33ce28:/shared/Performance_Testing/bin# ls -la
-```

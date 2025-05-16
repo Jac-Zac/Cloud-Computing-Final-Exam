@@ -12,9 +12,6 @@ plt.style.use("ggplot")
 
 
 def sanitize_filename(s):
-    """
-    Replace any non-alphanumeric characters with underscore and collapse multiples.
-    """
     valid = f"{string.ascii_letters}{string.digits}"
     cleaned = "".join(c if c in valid else "_" for c in s)
     cleaned = re.sub(r"_+", "_", cleaned)
@@ -32,9 +29,9 @@ def discover_disk_logs(root):
             if not fname.endswith(".log"):
                 continue
             base = os.path.splitext(fname)[0]
-            role = base.split("_")[0] if "_" in base else base
-            label = f"{role} ({system[:-1]})"
-            logs[label] = os.path.join(d, fname)
+            role = base.split("_")[0]
+            env = "container" if system == "containers" else "vm"
+            logs[f"{role} ({env})"] = os.path.join(d, fname)
     return logs
 
 
@@ -42,32 +39,34 @@ def parse_iozone(lines, metrics):
     sections = {"local": [], "shared": []}
     current = None
     for ln in lines:
-        ln = ln.strip()
-        if "sTARTING BENCHMARK FOR: LOCAL (STANDALONE)" in ln:
+        line = ln.strip()
+        if re.search(r"starting benchmark for:\s*local", line, re.IGNORECASE):
             current = "local"
             continue
-        if "--- IOZone shared filesystem test ---" in ln:
+        if re.search(r"--- iozone shared filesystem test ---", line, re.IGNORECASE):
             current = "shared"
             continue
-        if current and re.match(r"^\d+", ln):
-            parts = ln.split()
+        if current and re.match(r"^\d", line):
+            parts = line.split()
             if len(parts) >= 15:
                 try:
                     kb = int(parts[0])
+                    if kb <= 64:
+                        continue  # skip small sizes where resolution is unreliable
                     reclen = int(parts[1])
-                    values = list(map(float, parts[2:15]))
+                    values = list(map(float, parts[2 : 2 + len(metrics)]))
                     entry = {"section": current, "kB": kb, "reclen": reclen}
                     entry.update({metrics[i]: values[i] for i in range(len(metrics))})
                     sections[current].append(entry)
                 except ValueError:
                     continue
-
     return pd.DataFrame(sections["local"]), pd.DataFrame(sections["shared"])
 
 
 if __name__ == "__main__":
-    results_root = "../results"
-    out_dir = "plots/disk"
+    root = os.path.dirname(__file__)
+    results_root = os.path.join(root, "../results")
+    out_dir = os.path.join(root, "plots/disk")
     os.makedirs(out_dir, exist_ok=True)
 
     metrics = [
@@ -86,26 +85,24 @@ if __name__ == "__main__":
         "Freread (kB/s)",
     ]
 
-    full_records = []
-    log_paths = discover_disk_logs(results_root)
-    if not log_paths:
-        raise SystemExit("❌ No disk logs found under containers/disk or vms/disk")
+    records = []
+    logs = discover_disk_logs(results_root)
+    if not logs:
+        raise SystemExit("❌ No disk logs found")
 
-    for label, path in log_paths.items():
-        role, env = label.split(" (")
-        env = env.rstrip(")")
-        with open(path) as f:
-            lines = f.readlines()
-
+    for label, path in logs.items():
+        role, env = label.split()
+        env = env.strip("()").lower()
+        lines = open(path).readlines()
         df_local, df_shared = parse_iozone(lines, metrics)
         for df in (df_local, df_shared):
             if df.empty:
                 continue
             df["role"] = role
             df["environment"] = env
-            full_records.append(df)
+            records.append(df)
 
-    full_df = pd.concat(full_records, ignore_index=True)
+    full_df = pd.concat(records, ignore_index=True)
     long_df = full_df.melt(
         id_vars=["environment", "role", "section", "kB", "reclen"],
         value_vars=metrics,
@@ -115,113 +112,109 @@ if __name__ == "__main__":
 
     csv_path = os.path.join(out_dir, "disk_summary.csv")
     long_df.to_csv(csv_path, index=False)
-    print(f"📄 Summary CSV saved to: {csv_path}")
-    print(long_df.head())
+    print(f"📄 Saved summary CSV: {csv_path}")
 
-    groups = long_df.groupby(["role", "metric", "section"])
-    for (role, metric, section), grp in groups:
-        envs = grp["environment"].unique()
-        if set(envs) != {"vm", "container"}:
+    # 4-way 3D plots with improved layout
+    for (role, metric), grp in long_df.groupby(["role", "metric"]):
+        envs = set(grp["environment"])
+        secs = set(grp["section"])
+        if not envs.issuperset({"vm", "container"}) or not secs.issuperset(
+            {"local", "shared"}
+        ):
             continue
 
-        all_kb = sorted(grp["kB"].unique())
-        all_reclen = sorted(grp["reclen"].unique())
-        if not all_kb or not all_reclen:
-            continue
+        kb_vals = sorted(grp["kB"].unique())
+        rl_vals = sorted(grp["reclen"].unique())
+        x = np.arange(len(kb_vals))
+        y = np.arange(len(rl_vals))
+        kb_ix = {k: i for i, k in enumerate(kb_vals)}
+        rl_ix = {r: i for i, r in enumerate(rl_vals)}
 
-        vm_data = grp[grp["environment"] == "vm"]
-        cont_data = grp[grp["environment"] == "container"]
+        Z = {
+            (e, s): np.full((len(rl_vals), len(kb_vals)), np.nan)
+            for e in ("vm", "container")
+            for s in ("local", "shared")
+        }
+        for _, r in grp.iterrows():
+            Z[(r["environment"], r["section"])][rl_ix[r["reclen"]], kb_ix[r["kB"]]] = r[
+                "value"
+            ]
 
-        # Create evenly spaced index positions for both axes
-        x_positions = np.arange(len(all_kb))
-        y_positions = np.arange(len(all_reclen))
+        zmin = min(np.nanmin(m) for m in Z.values())
+        zmax = max(np.nanmax(m) for m in Z.values())
 
-        # Create a mapping from actual values to positions
-        kb_to_pos = {kb: i for i, kb in enumerate(all_kb)}
-        reclen_to_pos = {reclen: i for i, reclen in enumerate(all_reclen)}
-
-        # Create pivot tables with position indices
-        vm_matrix = np.full((len(all_reclen), len(all_kb)), np.nan)
-        cont_matrix = np.full((len(all_reclen), len(all_kb)), np.nan)
-
-        for _, row in vm_data.iterrows():
-            kb = row["kB"]
-            reclen = row["reclen"]
-            if kb in kb_to_pos and reclen in reclen_to_pos:
-                vm_matrix[reclen_to_pos[reclen], kb_to_pos[kb]] = row["value"]
-
-        for _, row in cont_data.iterrows():
-            kb = row["kB"]
-            reclen = row["reclen"]
-            if kb in kb_to_pos and reclen in reclen_to_pos:
-                cont_matrix[reclen_to_pos[reclen], kb_to_pos[kb]] = row["value"]
-
-        # Create meshgrid using positions
-        X, Y = np.meshgrid(x_positions, y_positions)
-        Z_vm = vm_matrix
-        Z_cont = cont_matrix
-
-        zmin = min(np.nanmin(Z_vm), np.nanmin(Z_cont))
-        zmax = max(np.nanmax(Z_vm), np.nanmax(Z_cont))
-
-        fig = plt.figure(figsize=(16, 8), constrained_layout=True)
-        # adjust subplot margins to fit labels
-        fig.subplots_adjust(left=0.05, right=0.95, bottom=0.10, top=0.90)
-
-        # common view
+        # Create figure with adjusted dimensions and layout
+        fig = plt.figure(figsize=(20, 18))
+        fig.suptitle(
+            f"Role: {role}   Metric: {metric}",
+            fontsize=18,
+            y=0.95,
+            verticalalignment="bottom",
+            weight="semibold",
+        )
         elev, azim = 25, -60
 
-        # VM subplot
-        ax1 = fig.add_subplot(1, 2, 1, projection="3d")
-        surf1 = ax1.plot_surface(X, Y, Z_vm, cmap="viridis", edgecolor="none")
-        ax1.set_xlim(min(x_positions), max(x_positions))
-        ax1.set_ylim(min(y_positions), max(y_positions))
-        ax1.set_zlim(zmin, zmax)
+        pos_map = {
+            ("vm", "local"): 1,
+            ("vm", "shared"): 2,
+            ("container", "local"): 3,
+            ("container", "shared"): 4,
+        }
 
-        # Set custom ticks for x and y axes using the actual values
-        ax1.set_xticks(x_positions)
-        ax1.set_xticklabels([f"{kb}" for kb in all_kb], rotation=45)
-        ax1.set_yticks(y_positions)
-        ax1.set_yticklabels([f"{rl}" for rl in all_reclen])
+        for (env, sec), idx in pos_map.items():
+            ax = fig.add_subplot(2, 2, idx, projection="3d")
+            surf = ax.plot_surface(
+                *np.meshgrid(x, y),
+                Z[(env, sec)],
+                cmap="viridis",
+                edgecolor="none",
+                alpha=0.8,
+            )
+            ax.set_title(f"{env.upper()} - {sec.capitalize()}", fontsize=14, pad=12)
 
-        ax1.set_xlabel("File Size (kB)", labelpad=15)
-        ax1.set_ylabel("Record Size (bytes)", labelpad=15)
-        ax1.set_zlabel(metric, labelpad=15)
-        ax1.view_init(elev=elev, azim=azim)
-        ax1.xaxis.set_tick_params(pad=10)
-        ax1.yaxis.set_tick_params(pad=10)
-        ax1.zaxis.set_tick_params(pad=10)
-        ax1.set_title(f"VM: {metric}\nRole: {role}, Section: {section}", pad=20)
+            # Configure x-axis ticks and labels
+            n_kb = len(kb_vals)
+            step_x = max(1, n_kb // 6)
+            ax.set_xticks(x[::step_x])
+            ax.set_xticklabels(
+                kb_vals[::step_x],
+                rotation=35,
+                ha="right",
+                fontsize=10,
+                rotation_mode="anchor",
+            )
 
-        # Container subplot
-        ax2 = fig.add_subplot(1, 2, 2, projection="3d")
-        surf2 = ax2.plot_surface(X, Y, Z_cont, cmap="viridis", edgecolor="none")
-        ax2.set_xlim(min(x_positions), max(x_positions))
-        ax2.set_ylim(min(y_positions), max(y_positions))
-        ax2.set_zlim(zmin, zmax)
+            # Configure y-axis ticks and labels
+            n_rl = len(rl_vals)
+            step_y = max(1, n_rl // 6)
+            ax.set_yticks(y[::step_y])
+            ax.set_yticklabels(rl_vals[::step_y], fontsize=10, ha="center", va="center")
 
-        # Set custom ticks for x and y axes using the actual values
-        ax2.set_xticks(x_positions)
-        ax2.set_xticklabels([f"{kb}" for kb in all_kb], rotation=45)
-        ax2.set_yticks(y_positions)
-        ax2.set_yticklabels([f"{rl}" for rl in all_reclen])
+            ax.set_xlabel("File Size (kB)", labelpad=10, fontsize=12)
+            ax.set_ylabel("Record Size (bytes)", labelpad=10, fontsize=12)
+            ax.set_zlabel(metric, labelpad=10, fontsize=12)
 
-        ax2.set_xlabel("File Size (kB)", labelpad=15)
-        ax2.set_ylabel("Record Size (bytes)", labelpad=15)
-        ax2.set_zlabel(metric, labelpad=15)
-        ax2.view_init(elev=elev, azim=azim)
-        ax2.xaxis.set_tick_params(pad=10)
-        ax2.yaxis.set_tick_params(pad=10)
-        ax2.zaxis.set_tick_params(pad=10)
-        ax2.set_title(f"Container: {metric}\nRole: {role}, Section: {section}", pad=20)
+            ax.set_zlim(zmin, zmax)
+            ax.view_init(elev=elev, azim=azim)
+            ax.grid(True, linestyle=":", alpha=0.5)
 
-        fig.colorbar(surf1, ax=[ax1, ax2], shrink=0.5, aspect=20)
+        # Manual layout adjustment
+        plt.subplots_adjust(
+            left=0.08, right=0.88, top=0.88, bottom=0.08, wspace=0.25, hspace=0.25
+        )
 
-        safe = sanitize_filename(f"{role}_{metric}_{section}_vm_vs_container")
-        fname = f"disk_{safe}_compare.png"
+        # Add colorbar with better positioning
+        cbar = fig.colorbar(
+            surf, ax=fig.get_axes(), shrink=0.6, aspect=25, pad=0.05, location="right"
+        )
+        cbar.ax.tick_params(labelsize=10)
+        cbar.ax.set_ylabel(metric, fontsize=12, rotation=-90, va="bottom")
+
+        # Save with modified parameters
+        fname = sanitize_filename(f"{role}_{metric}_4way") + ".png"
         save_path = os.path.join(out_dir, fname)
-        plt.savefig(save_path, bbox_inches="tight")
+        fig.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.2)
         plt.close(fig)
-        print(f"📈 Saved comparison: {save_path}")
+        print(f"📈 Saved: {save_path}")
 
-    print("✅ Done! 3D comparison plots and summary saved in", out_dir)
+    print("✅ All plots saved in", out_dir)

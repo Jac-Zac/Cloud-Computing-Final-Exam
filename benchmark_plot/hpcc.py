@@ -4,50 +4,38 @@ import re
 
 import matplotlib.pyplot as plt
 import numpy as _np
-import numpy as np
 import pandas as pd
 
-# Normalize axes into a 1D array called axes_flat
+# Nord palette
+NORD_FG = "#2E3440"
+NORD_GREEN = "#A3BE8C"
+NORD_RED = "#BF616A"
+NORD_GRAY = "#4C566A"
 
-
-# Nord palette (elements only)
-NORD_FG = "#2E3440"  # dark text/lines
-NORD_GREEN = "#A3BE8C"  # winners
-NORD_RED = "#BF616A"  # losers
-NORD_GRAY = "#4C566A"  # neutrals
-
-# Constants
+# Output directory
 OUT_DIR = "plots/hpcc"
 os.makedirs(OUT_DIR, exist_ok=True)
 
+# Input files per system
 HPCC_FILES = {
     "vms": "../results/vms/hpccoutf.txt",
     "containers": "../results/containers/hpccoutf.txt",
 }
 
+# Metrics of interest
 IMPORTANT_METRICS = [
     "HPL_Tflops",
+    "HPL_Best_Gflops",
     "StarDGEMM_Gflops",
     "StarSTREAM_Triad",
-    "SingleSTREAM_Triad",
-    "StarRandomAccess_GUPs",
-    "SingleRandomAccess_GUPs",
-    "StarFFT_Gflops",
-    "SingleFFT_Gflops",
     "AvgPingPongLatency_usec",
-    "AvgPingPongBandwidth_GBytes",
-    "PTRANS_GBs",
+    # ... other metrics
 ]
-
 CONFIG_METRICS = [
     "HPL_N",
     "HPL_NB",
-    "HPL_nprow",
-    "HPL_npcol",
     "CommWorldProcs",
-    "STREAM_VectorSize",
-    "FFT_N",
-    "PTRANS_n",
+    # ... other configs
 ]
 
 
@@ -60,29 +48,29 @@ def extract_timestamp(lines):
     return "Unknown"
 
 
-def parse_hpcc_output(lines):
-    metrics = {}
-    text = "\n".join(lines)
-    # Summary section
-    ss = text.find("Begin of Summary section.")
-    se = text.find("End of Summary section.")
-    if ss > 0 and se > ss:
-        for l in text[ss:se].splitlines():
+def parse_hpcc_output(file_path, system_name):
+    """
+    Parse all summary sections in an HPCC output file, return one dict per run.
+    """
+    text = open(file_path).read()
+    entries = []
+    secs = re.split(r"Begin of Summary section\.", text)[1:]
+    for sec in secs:
+        part, _ = sec.split("End of Summary section.", 1)
+        metrics = {}
+        for l in part.splitlines():
             if "=" in l:
                 k, v = l.split("=", 1)
                 k, v = k.strip(), v.strip()
                 try:
                     metrics[k] = float(v)
-                except:
+                except ValueError:
                     metrics[k] = v
-    metrics["Timestamp"] = extract_timestamp(lines)
-
-    # HPL best
-    m = re.search(r"End of HPL section", text)
-    if m:
-        snippet = text[: m.start()]
+        metrics["Timestamp"] = extract_timestamp(part.splitlines())
+        metrics["System"] = system_name
+        # best HPL
         best = 0
-        for l in snippet.splitlines():
+        for l in text[: text.find("End of HPL section")].splitlines():
             if "WR11C2R4" in l:
                 g = re.search(r"(\d+\.\d+)e\+(\d+)", l)
                 if g:
@@ -90,226 +78,168 @@ def parse_hpcc_output(lines):
                     best = max(best, val)
         if best:
             metrics["HPL_Best_Gflops"] = best
-            metrics["HPL_Best_Tflops"] = best / 1000
-    return metrics
+            metrics["HPL_Best_Tflops"] = best / 1e3
+        entries.append(metrics)
+    return entries
 
 
-def generate_metric_plots(df, metric_groups, out_dir):
-    """Generate plots for groups of related metrics."""
-    # Define metrics where lower values are better (like latency)
-    lower_is_better = [
-        "AvgPingPongLatency_usec",
-        "MaxPingPongLatency_usec",
-        "MinPingPongLatency_usec",
-        "PTRANS_time",
-    ]
-
-    for group_name, metrics in metric_groups.items():
-        # Filter metrics that actually exist in the dataframe
-        available_metrics = [m for m in metrics if m in df.columns]
-
-        if not available_metrics:
-            print(f"⚠️ No data found for metric group '{group_name}'")
+def generate_metric_plots(df, metric_groups, out_dir, dpi=200):
+    lower_is_better = ["AvgPingPongLatency_usec", "PTRANS_time"]
+    for group, metrics in metric_groups.items():
+        available = [m for m in metrics if m in df]
+        if not available:
+            print(f"⚠️ No data for {group}")
             continue
-
-        # Create a figure with subplots in a more horizontal layout
-        max_cols = 2  # Maximum 2 metrics per row
-        num_rows = (len(available_metrics) + max_cols - 1) // max_cols
-        num_cols = min(max_cols, len(available_metrics))
-
-        fig, axes = plt.subplots(
-            num_rows,
-            num_cols,
-            figsize=(12, 4 * num_rows),
-            squeeze=False,  # Ensure axes is always a 2D array
-        )
-
-        # Normalize axes into a 1D array called axes_flat
-        import numpy as _np
-
-        if not isinstance(axes, _np.ndarray):
-            axes = _np.array([[axes]])
+        rows = (len(available) + 1) // 2
+        cols = min(2, len(available))
+        fig, axes = plt.subplots(rows, cols, figsize=(12, 4 * rows), squeeze=False)
         axes_flat = axes.flatten()
-
-        # Plot each metric
-        for i, metric in enumerate(available_metrics):
-            if i >= len(axes_flat):
-                break  # Safeguard against index errors
-
+        systems = df["System"].unique()
+        for i, metric in enumerate(available):
             ax = axes_flat[i]
-
-            # Create a comparison of systems for this metric
-            systems = df["System"].unique()
-            values = [
-                (
-                    df[df["System"] == sys][metric].values[0]
-                    if not df[df["System"] == sys].empty
-                    else 0
-                )
-                for sys in systems
-            ]
-
-            # Determine winner and loser based on metric
+            vals = [df[df.System == s][metric].iloc[-1] for s in systems]
             if metric in lower_is_better:
-                winner_idx = _np.argmin(values)
-                loser_idx = _np.argmax(values)
+                wi, li = _np.argmin(vals), _np.argmax(vals)
             else:
-                winner_idx = _np.argmax(values)
-                loser_idx = _np.argmin(values)
-
-            # Create color list - winner green, loser red, others neutral (Nord palette)
-            colors = [NORD_GRAY] * len(systems)  # Default neutral color
-            colors[winner_idx] = NORD_GREEN  # Green for winner
-            colors[loser_idx] = NORD_RED  # Red for loser
-
-            # If only two systems, just use green and red
+                wi, li = _np.argmax(vals), _np.argmin(vals)
+            colors = [NORD_GRAY] * len(systems)
+            colors[wi], colors[li] = NORD_GREEN, NORD_RED
             if len(systems) == 2:
-                if winner_idx == 0:
-                    colors = [NORD_GREEN, NORD_RED]
-                else:
-                    colors = [NORD_RED, NORD_GREEN]
-
-            # Create the bar chart
-            bars = ax.bar(systems, values, color=colors)
-
-            # Add value labels on top of bars
-            for bar, value in zip(bars, values):
-                height = bar.get_height()
+                colors = [NORD_GREEN, NORD_RED] if wi == 0 else [NORD_RED, NORD_GREEN]
+            bars = ax.bar(systems, vals, color=colors)
+            for bar, v in zip(bars, vals):
                 ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    height * 1.01,
-                    f"{value:.4g}",
-                    ha="center",
-                    va="bottom",
-                    fontsize=9,
+                    bar.get_x() + bar.get_width() / 2, v * 1.01, f"{v:.3g}", ha="center"
                 )
-
-            # Set title and labels
-            metric_display = metric.replace("_", " ")
-            ax.set_title(metric_display, fontsize=10)
-            ax.set_ylabel(metric.split("_")[-1], fontsize=9)  # Unit
-            ax.tick_params(axis="x", rotation=45, labelsize=9)
-
-            # Add a note about which direction is better
-            better_text = (
+            ax.set_title(metric.replace("_", " "))
+            ax.set_ylabel(metric.split("_")[-1])
+            ax.tick_params(axis="x", rotation=45)
+            better = (
                 "Lower is better" if metric in lower_is_better else "Higher is better"
             )
             ax.annotate(
-                better_text,
+                better,
                 xy=(0.5, 0.97),
                 xycoords="axes fraction",
                 ha="center",
-                va="top",
                 fontsize=8,
                 style="italic",
             )
-
-        # Hide any unused subplots
-        for j in range(len(available_metrics), len(axes_flat)):
+        for j in range(len(available), len(axes_flat)):
             axes_flat[j].axis("off")
-
         plt.tight_layout()
-        fig_path = os.path.join(out_dir, f"{group_name.lower().replace(' ', '_')}.png")
-        plt.savefig(fig_path, dpi=100, bbox_inches="tight")
+        path = os.path.join(out_dir, f"{group.lower().replace(' ','_')}.png")
+        fig.savefig(path, dpi=dpi, bbox_inches="tight")
         plt.close(fig)
-        print(f"📊 Plot saved: {fig_path}")
+        print(f"📊 Saved: {path}")
 
 
-def generate_value_matrix_plot(df, metrics, out_dir):
-    mets = [m for m in metrics if m in df.columns]
+def generate_hpl_scaling_plot(df, out_dir, dpi=200):
+    """
+    Plot HPL_Best_Tflops vs HPL_N for each System.
+    """
+    if "HPL_N" not in df or "HPL_Best_Tflops" not in df:
+        print("⚠️ Missing HPL_N or HPL_Best_Tflops")
+        return
+    plt.figure(figsize=(8, 5))
+    for sys, grp in df.groupby("System"):
+        # sort by HPL_N
+        grp_sorted = grp.sort_values("HPL_N")
+        plt.plot(
+            grp_sorted["HPL_N"], grp_sorted["HPL_Best_Tflops"], marker="o", label=sys
+        )
+    plt.xlabel("Problem Size (HPL_N)")
+    plt.ylabel("Performance (Tflops)")
+    plt.title("HPL Scaling: Performance vs Problem Size")
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.5)
+    path = os.path.join(out_dir, "hpl_scaling.png")
+    plt.savefig(path, dpi=dpi, bbox_inches="tight")
+    plt.close()
+    print(f"📈 Saved HPL scaling plot: {path}")
+
+
+def generate_value_matrix_plot(df, metrics, out_dir, dpi=200):
+    mets = [m for m in metrics if m in df]
     if not mets:
         print("⚠️ No important metrics")
         return
-
     mat = df.set_index("System")[mets].T
-    lower_better = {
-        "AvgPingPongLatency_usec",
-        "MinPingPongLatency_usec",
-        "MaxPingPongLatency_usec",
-        "PTRANS_time",
-    }
-
-    green, red, gray = NORD_GREEN, NORD_RED, NORD_GRAY
-    cell_colors = []
+    lower_better = {"AvgPingPongLatency_usec"}
+    colors = []
     for m in mat.index:
         row = mat.loc[m]
-        if m in lower_better:
-            w, l = row.idxmin(), row.idxmax()
-        else:
-            w, l = row.idxmax(), row.idxmin()
-        row_colors = [green if s == w else red if s == l else gray for s in mat.columns]
-        cell_colors.append(row_colors)
-
+        w, l = (
+            (row.idxmin(), row.idxmax())
+            if m in lower_better
+            else (row.idxmax(), row.idxmin())
+        )
+        colors.append(
+            [
+                NORD_GREEN if c == w else NORD_RED if c == l else NORD_GRAY
+                for c in mat.columns
+            ]
+        )
     fig, ax = plt.subplots(
         figsize=(1.5 * len(mat.columns) + 2, 0.5 * len(mat.index) + 2)
     )
     ax.axis("off")
     table = ax.table(
         cellText=mat.values,
-        rowLabels=[m.replace("_", " ") for m in mat.index],
+        rowLabels=mat.index.str.replace("_", " "),
         colLabels=mat.columns,
-        cellLoc="center",
-        cellColours=cell_colors,
+        cellColours=colors,
         loc="center",
     )
     table.auto_set_font_size(False)
     table.set_fontsize(9)
-    table.scale(1, 1.3)
-    for (r, c), cell in table.get_celld().items():
+    for key, cell in table.get_celld().items():
         cell.get_text().set_color(NORD_FG)
         cell.set_edgecolor(NORD_GRAY)
-
     plt.tight_layout()
     path = os.path.join(out_dir, "performance_value_matrix.png")
-    plt.savefig(path, dpi=100)
+    fig.savefig(path, dpi=dpi)
     plt.close(fig)
-    print(f"📊 Saved {path}")
+    print(f"📊 Saved: {path}")
 
 
-def save_configuration_info(df, configs, out_dir):
-    avail = [m for m in configs if m in df.columns]
+def save_configuration_info(df, configs, out_dir, dpi=200):
+    avail = [m for m in configs if m in df]
     if not avail:
         print("⚠️ No config data")
         return
-
-    cfg = df[["System"] + avail]
     csv = os.path.join(out_dir, "hpcc_config.csv")
-    cfg.to_csv(csv, index=False)
-    print(f"📄 Saved {csv}")
-
-    fig, ax = plt.subplots(figsize=(10, len(avail) * 0.25 + 1))
+    df[["System"] + avail].to_csv(csv, index=False)
+    print(f"📄 Saved: {csv}")
+    fig, ax = plt.subplots(figsize=(10, len(avail) * 0.3 + 1))
     ax.axis("off")
     tbl = ax.table(
-        cellText=cfg.values, colLabels=cfg.columns, cellLoc="center", loc="center"
+        cellText=df[["System"] + avail].values,
+        colLabels=["System"] + avail,
+        loc="center",
     )
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(9)
-    tbl.scale(1, 1.3)
     for key, cell in tbl.get_celld().items():
         cell.get_text().set_color(NORD_FG)
         cell.set_edgecolor(NORD_GRAY)
-
+    plt.tight_layout()
     path = os.path.join(out_dir, "system_config_table.png")
-    plt.savefig(path, dpi=100)
+    fig.savefig(path, dpi=dpi)
     plt.close(fig)
-    print(f"📊 Saved {path}")
+    print(f"📊 Saved: {path}")
 
 
 def main():
     rows = []
-    for sys, p in HPCC_FILES.items():
-        if not os.path.isfile(p):
-            print(f"❌ Missing: {p}")
+    for sys, path in HPCC_FILES.items():
+        if not os.path.isfile(path):
+            print(f"❌ Missing: {path}")
             continue
-        print(f"Processing {p}")
-        lines = open(p).read().splitlines()
-        m = parse_hpcc_output(lines)
-        m["System"] = sys
-        rows.append(m)
-
+        print(f"Processing {path}")
+        rows.extend(parse_hpcc_output(path, sys))
     if not rows:
         raise SystemExit("❌ No logs")
-
     df = pd.DataFrame(rows)
     df.to_csv(os.path.join(OUT_DIR, "hpcc_full_results.csv"), index=False)
     print("📄 Full results saved")
@@ -319,12 +249,12 @@ def main():
         "Matrix Operations": ["StarDGEMM_Gflops", "SingleDGEMM_Gflops"],
         "Memory Bandwidth": ["StarSTREAM_Triad", "SingleSTREAM_Triad"],
         "RandomAccess": ["StarRandomAccess_GUPs", "SingleRandomAccess_GUPs"],
-        "FFT Performance": ["StarFFT_Gflops", "SingleFFT_Gflops"],
         "Communication": ["AvgPingPongLatency_usec", "AvgPingPongBandwidth_GBytes"],
         "PTRANS": ["PTRANS_GBs"],
     }
 
     generate_metric_plots(df, metric_groups, OUT_DIR)
+    generate_hpl_scaling_plot(df, OUT_DIR)
     generate_value_matrix_plot(df, IMPORTANT_METRICS, OUT_DIR)
     save_configuration_info(df, CONFIG_METRICS, OUT_DIR)
 

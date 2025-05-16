@@ -23,43 +23,35 @@ The aim was to compare performance and resource isolation among these key enviro
 
 The framework was deployed across the following environments: a host machine (macOS M4 in this case), three docker containers (a master and two workers) that simulate a HPC cluster, and multiple virtual machines with 2 vCPUs and 2 GB RAM. 
 
-Docker compose enabled the containerised cluster management. Thanks to a bridge network it established inter-container communication. Also, via a docker-managed volume mounted at `/shared`, filesystem access was enabled. 
+Docker compose enabled the containerised cluster management. Thanks to a bridge network it established inter-container communication. Also, via a docker-managed volume mounted at `/shared`, shared filesystem access was enabled. 
 
 == Installation
-The software dependencies, sysbench, hpcc, iozone, and iperf3, are installed using the following command:
 
-```bash
-brew install sysbench stress-ng iozone iperf3
-```
-
-On virtual machines and containers, dependencies are automatically installed by using: 
+Dependencies can be installed using this script if not installed already:
 
 ```bash
 ./install-deps.sh
 ```
 
-At this point the project structure has evolved in something like this:
+
+Folder structure to test different parts of the cluster
 
 ```bash
 .
-├── Dockerfile
-├── compose.yaml
-├── entrypoint.sh
-├── benchmark/
-│   ├── run-all.sh
-│   ├── configs/
-│   │   └── mpi-hostfile
-│   ├── results/
-│   │   ├── master/
-│   │   ├── node-01/
-│   │   └── node-02/
-│   └── shared/
-├── bin/
+├── bin
+│   ├── common.sh
 │   ├── cpu-benchmark.sh
-│   ├── mem-benchmark.sh
 │   ├── disk-benchmark.sh
+│   ├── mem-benchmark.sh
 │   └── net-benchmark.sh
-└── install-deps.sh
+├──  configs
+│   ├── hpccinf.txt
+│   └── mpi-hostfile
+├── results/
+├── errors.md
+├── install-deps.sh
+├── README.md
+└── run-all.sh
 ```
 
 == CPU benchmarking
@@ -74,36 +66,24 @@ sudo apt update
 sudo apt install hpcc
 ```
 
-After, it is important to check if `openmpi` is available on all nodes using:
-
-```bash
-apt list --installed | grep mpi
-```
-
-At this point, a hostfile that lists all node hostnames is created with the name `cluster_hosts`. 
+At this point, a hostfile that lists all node hostnames is created with the name `mpi-hostfile`. 
 
 The benchmark is run with default parameters to check the setup integrity:
 
 ```bash
-mpirun.openmpi -np 3 -hostfile cluster_hosts hpcc
+mpirun.openmpi -mca btl_tcp_if_include enp0s9 -np 6 -hostfile mpi-hostfile hpcc
 ```
  
-Due to unspecified network interface, a warning is encountered, which can be solved by setting the interface:
-
-```bash
-mpirun.openmpi -mca btl_tcp_if_include enp0s8 -np 3 -hostfile cluster_hosts hpcc
-```
-
 Finally, the benchmark was configured for a larger problem size with the example input file (`_hpccinf.txt`) customised as follows:
 
 ```bash
-11520          Ns         (problem size)
-64 128 192 256 NBs        (block sizes)
-1              Ps         (process grid dimension P)
-3              Qs         (process grid dimension Q)
+1024 2048 4096 8192   Ns         (problem size)
+32 64 128 256	      NBs        (block sizes)
+2		      Ps         (process grid dimension P)
+3		      Qs         (process grid dimension Q)
 ```
 
-Thanks to this configuration, the matrix size was divisible by the block sizes, leading to an improvement in both load balancing and performance results accuracy. 
+Thanks to this configuration, the work was tested on different problem sizes and spread across the cores of the different nodes.
 
 === Sysbench - CPU
 
