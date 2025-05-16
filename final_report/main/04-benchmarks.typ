@@ -81,19 +81,13 @@ Finally, the benchmark was configured for a larger problem size with the example
 
 ```bash
 1024 2048 4096 8192   Ns         (problem size)
-32 64 128 256	      NBs        (block sizes)
-2		      Ps         (process grid dimension P)
-3		      Qs         (process grid dimension Q)
+32 64 128 256	        NBs        (block sizes)
+2		                  Ps         (process grid dimension P)
+3		                  Qs         (process grid dimension Q)
 ```
 
 Thanks to this configuration, the work was tested on different problem sizes and spread across the cores of the different nodes.
 
-==== HPL test Results
-
-...
-ADD PLOT AND COMMENTS
-
-See if also stressng we want to add it
 === Sysbench - CPU
 
 In order to complement the HPL results, `sysbench` was used to benchmark the single-node CPU performance. Though this method lacks distributed execution support, the script was done in parallel on all nodes to showcase a more realistic cluster stress test.
@@ -121,8 +115,6 @@ Run the script in parallel and log the info simply by running the following comm
 ./run_all cpu config/mpi-hostfile
 ```
 
-RESULTS
-
 == Memory performance
 
 Similarly to what done for the CPU performance evaluation, memory benchmarks was also performed using `sysbench`:
@@ -141,7 +133,6 @@ Again by running the custom script for the memory:
 ./run_all mem config/mpi-hostfile
 ```
 
-...
 
 == Disk I/O performance
 
@@ -176,9 +167,6 @@ fi
 ```],
   caption:"Disk performance test",
 )
-
-
-Obtaining the following results ...
 
 // not sure you want to write this:
 // As expected, the NFS-based write performance was lower than local storage due to network latency.

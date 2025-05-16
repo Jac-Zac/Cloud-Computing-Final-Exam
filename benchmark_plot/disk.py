@@ -91,6 +91,7 @@ if __name__ == "__main__":
         "Freread (kB/s)",
     ]
 
+    # --- Load & parse all logs ---
     records = []
     logs = discover_disk_logs(results_root)
     if not logs:
@@ -109,6 +110,11 @@ if __name__ == "__main__":
             records.append(df)
 
     full_df = pd.concat(records, ignore_index=True)
+
+    # 🚫 Exclude 'node local' everywhere
+    full_df = full_df[~((full_df["role"] == "node") & (full_df["section"] == "local"))]
+
+    # Melt for long form
     long_df = full_df.melt(
         id_vars=["environment", "role", "section", "kB", "reclen"],
         value_vars=metrics,
@@ -116,12 +122,16 @@ if __name__ == "__main__":
         value_name="value",
     )
 
-    # Save summary CSV for later use
+    # Determine the single, largest file size
+    max_kb = long_df["kB"].max()
+    long_df_big = long_df[long_df["kB"] == max_kb]
+
+    # Save summary CSV
     csv_path = os.path.join(out_dir, "disk_summary.csv")
     long_df.to_csv(csv_path, index=False)
     print(f"📄 Saved summary CSV: {csv_path}")
 
-    # Generate 4-way 3D surface plots
+    # --- 3D Plots (unchanged, still using full data) ---
     for (role, metric), grp in long_df.groupby(["role", "metric"]):
         envs = set(grp["environment"])
         secs = set(grp["section"])
@@ -130,7 +140,7 @@ if __name__ == "__main__":
         ):
             continue
 
-        # Prepare grid indices
+        # Prepare mesh
         kb_vals = sorted(grp["kB"].unique())
         rl_vals = sorted(grp["reclen"].unique())
         x = np.arange(len(kb_vals))
@@ -138,14 +148,12 @@ if __name__ == "__main__":
         kb_ix = {k: i for i, k in enumerate(kb_vals)}
         rl_ix = {r: i for i, r in enumerate(rl_vals)}
 
-        # Populate Z matrices
         Z = {
             (e, s): np.full((len(rl_vals), len(kb_vals)), np.nan)
             for e in ("vm", "container")
             for s in ("local", "shared")
         }
         for _, r in grp.iterrows():
-            Z[(r["environment"], r["section"])]
             Z[(r["environment"], r["section"])][rl_ix[r["reclen"]], kb_ix[r["kB"]]] = r[
                 "value"
             ]
@@ -153,7 +161,6 @@ if __name__ == "__main__":
         zmin = min(np.nanmin(m) for m in Z.values())
         zmax = max(np.nanmax(m) for m in Z.values())
 
-        # Create 3D figure
         fig = plt.figure(figsize=(20, 18))
         fig.suptitle(
             f"Role: {role}   Metric: {metric}", fontsize=18, y=0.95, weight="semibold"
@@ -176,7 +183,6 @@ if __name__ == "__main__":
                 alpha=0.8,
             )
             ax.set_title(f"{env.upper()} - {sec.capitalize()}", fontsize=14, pad=12)
-            # Axis labels and ticks
             step_x = max(1, len(kb_vals) // 6)
             ax.set_xticks(x[::step_x])
             ax.set_xticklabels(kb_vals[::step_x], rotation=35, ha="right", fontsize=10)
@@ -190,7 +196,6 @@ if __name__ == "__main__":
             ax.view_init(elev=elev, azim=azim)
             ax.grid(True, linestyle=":", alpha=0.5)
 
-        # Adjust layout and add colorbar
         plt.subplots_adjust(
             left=0.08, right=0.88, top=0.88, bottom=0.08, wspace=0.25, hspace=0.25
         )
@@ -200,133 +205,159 @@ if __name__ == "__main__":
         cbar.ax.tick_params(labelsize=10)
         cbar.ax.set_ylabel(metric, fontsize=12, rotation=-90, va="bottom")
 
-        # Save 3D figure
         fname_3d = sanitize_filename(f"{role}_{metric}_4way") + ".png"
         save_path_3d = os.path.join(out_dir, fname_3d)
         fig.savefig(save_path_3d, dpi=300, bbox_inches="tight", pad_inches=0.2)
         plt.close(fig)
         print(f"📈 Saved: {save_path_3d}")
 
-    # ------------------------------------------------------------
-    # Additional 2D bar chart: average throughput per metric (Local vs Shared)
-    # ------------------------------------------------------------
-    # Compute overall average for each metric and section
-    summary = long_df.groupby(["metric", "section"])["value"].mean().unstack()
-    operations = summary.index.tolist()
-    local_vals = summary["local"].tolist()
-    shared_vals = summary["shared"].tolist()
+    # --- Bar: Local vs Shared (largest kB only) ---
+    summary_ls = long_df_big.groupby(["metric", "section"])["value"].mean().unstack()
+    ops = summary_ls.index.tolist()
+    local_vals = summary_ls["local"].tolist()
+    shared_vals = summary_ls["shared"].tolist()
 
-    # Plot bar chart with Nord theme colors
     plt.figure(figsize=(14, 7))
-    bar_width = 0.35
-    indices = np.arange(len(operations))
-
-    plt.bar(
-        indices, local_vals, width=bar_width, label="Local (IOzone)", color=NORD_LOCAL
-    )
-    plt.bar(
-        indices + bar_width,
-        shared_vals,
-        width=bar_width,
-        label="Shared (IOzone)",
-        color=NORD_SHARED,
-    )
-
-    plt.xticks(indices + bar_width / 2, operations, rotation=45, ha="right")
-    plt.ylabel("Average Throughput (kB/s)", fontsize=12)
-    plt.title("Average IOzone Throughput by Metric: Local vs Shared", fontsize=16)
+    idx = np.arange(len(ops))
+    w = 0.35
+    plt.bar(idx, local_vals, width=w, label="Local", color=NORD_LOCAL)
+    plt.bar(idx + w, shared_vals, width=w, label="Shared", color=NORD_SHARED)
+    plt.xticks(idx + w / 2, ops, rotation=45, ha="right")
+    plt.ylabel("Throughput (kB/s)")
+    plt.title(f"Avg IOzone Throughput (kB={max_kb}) – Local vs Shared")
     plt.legend()
     plt.grid(axis="y", linestyle="--", alpha=0.5)
     plt.tight_layout()
-
-    # Save bar chart
-    fname_bar = "iozone_local_vs_shared_bar_nord.png"
-    save_path_bar = os.path.join(out_dir, fname_bar)
-    plt.savefig(save_path_bar, dpi=300)
+    path_ls = os.path.join(out_dir, "iozone_local_vs_shared_bar_biggest.png")
+    plt.savefig(path_ls, dpi=300)
     plt.close()
-    print(f"📊 Saved bar comparison: {save_path_bar}")
+    print(f"📊 Saved bar comparison: {path_ls}")
 
-    # ------------------------------------------------------------
-    # NEW PLOT: Compare VM vs Container for both Local and Shared filesystems
-    # ------------------------------------------------------------
-    # Group by environment, section, and metric to get averages
-    env_comparison = (
-        long_df.groupby(["environment", "section", "metric"])["value"]
+    # --- Bar: VM vs Container (largest kB only) ---
+    env_comp = (
+        long_df_big.groupby(["environment", "section", "metric"])["value"]
         .mean()
         .reset_index()
     )
-
-    # Pivot to get the data in the right format for plotting
-    pivot_df = env_comparison.pivot_table(
+    pivot_ec = env_comp.pivot_table(
         index="metric", columns=["environment", "section"], values="value"
-    ).reset_index()
+    )
+    ops = pivot_ec.index.tolist()
+    idx = np.arange(len(ops))
+    w = 0.2
 
-    # Get operation names (metrics)
-    operations = pivot_df["metric"].tolist()
+    def get_vals(df, env, sec):
+        return df[(env, sec)].tolist() if (env, sec) in df else [0] * len(ops)
 
-    # Extract values for our four categories
-    vm_local = pivot_df[("vm", "local")].tolist()
-    vm_shared = pivot_df[("vm", "shared")].tolist()
-    container_local = pivot_df[("container", "local")].tolist()
-    container_shared = pivot_df[("container", "shared")].tolist()
+    vm_l = get_vals(pivot_ec, "vm", "local")
+    vm_s = get_vals(pivot_ec, "vm", "shared")
+    ct_l = get_vals(pivot_ec, "container", "local")
+    ct_s = get_vals(pivot_ec, "container", "shared")
 
-    # Create plot with Nord theme colors
     plt.figure(figsize=(16, 8))
-    bar_width = 0.2
-    indices = np.arange(len(operations))
-
-    # Plot the four categories
+    plt.bar(idx - 1.5 * w, vm_l, width=w, label="VM - Local", color=NORD_VM, alpha=0.9)
+    plt.bar(idx - 0.5 * w, vm_s, width=w, label="VM - Shared", color=NORD_VM, alpha=0.6)
     plt.bar(
-        indices - bar_width * 1.5,
-        vm_local,
-        width=bar_width,
-        label="VM - Local",
-        color=NORD_VM,
-        alpha=0.9,
-    )
-    plt.bar(
-        indices - bar_width / 2,
-        vm_shared,
-        width=bar_width,
-        label="VM - Shared",
-        color=NORD_VM,
-        alpha=0.6,
-    )
-    plt.bar(
-        indices + bar_width / 2,
-        container_local,
-        width=bar_width,
+        idx + 0.5 * w,
+        ct_l,
+        width=w,
         label="Container - Local",
         color=NORD_CONTAINER,
         alpha=0.9,
     )
     plt.bar(
-        indices + bar_width * 1.5,
-        container_shared,
-        width=bar_width,
+        idx + 1.5 * w,
+        ct_s,
+        width=w,
         label="Container - Shared",
         color=NORD_CONTAINER,
         alpha=0.6,
     )
-
-    # Add labels, title, and legend
-    plt.xlabel("Operation", fontsize=12)
-    plt.ylabel("Average Throughput (kB/s)", fontsize=12)
-    plt.title(
-        "IOzone Performance: VM vs Container, Local vs Shared Filesystems", fontsize=16
-    )
-    plt.xticks(indices, operations, rotation=45, ha="right")
+    plt.xticks(idx, ops, rotation=45, ha="right")
+    plt.ylabel("Throughput (kB/s)")
+    plt.title(f"IOzone: VM vs Container (kB={max_kb})")
     plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
     plt.grid(axis="y", linestyle="--", alpha=0.5)
-
-    # Adjust layout
     plt.tight_layout()
-
-    # Save comparison plot
-    fname_comp = "iozone_vm_vs_container_local_vs_shared_nord.png"
-    save_path_comp = os.path.join(out_dir, fname_comp)
-    plt.savefig(save_path_comp, dpi=300, bbox_inches="tight")
+    path_ec = os.path.join(out_dir, "iozone_vm_vs_container_biggest.png")
+    plt.savefig(path_ec, dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"📊 Saved VM vs Container comparison: {save_path_comp}")
+    print(f"📊 Saved VM vs Container comparison: {path_ec}")
+
+    # --- Bar: Master vs Node (largest kB only) ---
+    fn = long_df_big[
+        (long_df_big["role"].isin(["master", "node"]))
+        & ~((long_df_big["role"] == "node") & (long_df_big["section"] == "local"))
+    ]
+    grp_mn = (
+        fn.groupby(["environment", "role", "section", "metric"])["value"]
+        .mean()
+        .reset_index()
+    )
+    p_mn = grp_mn.pivot_table(
+        index="metric", columns=["environment", "role", "section"], values="value"
+    )
+    ops = p_mn.index.tolist()
+    idx = np.arange(len(ops))
+
+    def sc(col):
+        return p_mn[col].tolist() if col in p_mn else [0] * len(ops)
+
+    d_ml = sc(("container", "master", "local"))
+    d_ms = sc(("container", "master", "shared"))
+    d_ns = sc(("container", "node", "shared"))
+    v_ml = sc(("vm", "master", "local"))
+    v_ms = sc(("vm", "master", "shared"))
+    v_ns = sc(("vm", "node", "shared"))
+
+    plt.figure(figsize=(18, 8))
+    plt.bar(
+        idx - 1.5 * w,
+        d_ml,
+        width=w,
+        label="Docker: Master Local",
+        color=NORD_CONTAINER,
+        alpha=1.0,
+    )
+    plt.bar(
+        idx - 0.5 * w,
+        d_ms,
+        width=w,
+        label="Docker: Master Shared",
+        color=NORD_CONTAINER,
+        alpha=0.75,
+    )
+    plt.bar(
+        idx + 0.5 * w,
+        d_ns,
+        width=w,
+        label="Docker: Node Shared",
+        color=NORD_CONTAINER,
+        alpha=0.5,
+    )
+    plt.bar(
+        idx + 1.5 * w, v_ml, width=w, label="VM: Master Local", color=NORD_VM, alpha=1.0
+    )
+    plt.bar(
+        idx + 2.5 * w,
+        v_ms,
+        width=w,
+        label="VM: Master Shared",
+        color=NORD_VM,
+        alpha=0.75,
+    )
+    plt.bar(
+        idx + 3.5 * w, v_ns, width=w, label="VM: Node Shared", color=NORD_VM, alpha=0.5
+    )
+    plt.xticks(idx, ops, rotation=45, ha="right")
+    plt.ylabel("Throughput (kB/s)")
+    plt.title(f"Master vs Node – Docker & VM (kB={max_kb})")
+    plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+    plt.grid(axis="y", linestyle="--", alpha=0.5)
+    plt.tight_layout()
+    path_mn = os.path.join(out_dir, "iozone_master_vs_node_biggest.png")
+    plt.savefig(path_mn, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"📊 Saved Master vs Node comparison: {path_mn}")
 
     print("✅ All plots saved in", out_dir)

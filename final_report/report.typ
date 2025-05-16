@@ -31,7 +31,7 @@
 #include "/main/02-vm_setup.typ"
 #include "/main/03-containers_setup.typ"
 #include "/main/04-benchmarks.typ"
-// #include "/main/05-validation.typ"
+#include "/main/05-results.typ"
 #include "/main/06-conclusion.typ"
 #include "/main/to_know.typ"
 
