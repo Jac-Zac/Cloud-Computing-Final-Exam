@@ -1,6 +1,5 @@
 #import "@preview/hei-synd-report:0.1.1": *
 #import "/metadata.typ": *
-#pagebreak()
 
 = Results
 
@@ -11,7 +10,12 @@
   caption: "HPL Performance Scaling Comparison"
 )
 
-As shown in the scaling results across different problem sizes, the performance of virtual machines and containers is relatively similar. We observe an initial increase in Tflops starting from a problem size of `1024`, which is likely too small to fully stress the processor. Following this, performance plateaus, but containers still demonstrate slightly better performance overall. This outcome is expected, as containers also require some hardware virtualization, so the performance gap between the two is not very large.
+As shown in the scaling results across different problem sizes, the performance of virtual machines and containers is relatively similar. We observe an initial increase in Tflops starting from a problem size of `1024`, which is likely too small to fully stress the processor. After this, performance plateaus, but containers still demonstrate slightly better performance overall.
+
+#warningbox()[
+This outcome is expected, as both containers and VMs involve some degree of hardware virtualization-especially on macOS, where Docker containers run inside a lightweight VM. 
+Therefore, the performance gap between the two is not very large.
+]
 
 == CPU sysbench
 
@@ -62,6 +66,7 @@ The memory throughput results show that containers slightly outperform virtual m
 Both virtualization approaches, however, deliver lower memory bandwidth compared to the host machine running standalone. 
 This is expected due to the overhead introduced by virtualization layers. The host system achieves the highest memory throughput, indicating more direct and efficient access to physical memory resources.
 
+
 == Disk I/O test results 
 
 #grid(
@@ -72,11 +77,30 @@ This is expected due to the overhead introduced by virtualization layers. The ho
   figure(image("/resources/img/disk/iozone_vm_vs_container_biggest.png"), caption: "Biggest Iozone Throughput") 
 ),
 
-From what we can see the disk performance is as expected better in read compared to write. Espcially we can notice that in all read related task the Virtual machine suffer much more (Idk why explain it ??) Especially when the filesystem is shared it has a big impact, on the other hand reading from a shared filesystem dones't have much of an inpact. I belive hte slowdown in the write is due to the necesssary sincronization. On the other hand the containers do not really suffer much from this problem and don't have a big difference beteween shared or not and I belive this is do to how the sharing of the folder is implemented in the container which I gthink that instead of going through the netwroks is simly mapped there or something.
-Morover we notice quite simlar perfrormance between virtual machiens and containers in read which is not suprising considienrg that containers on macos as previsouly state also run on a virtual machiene.,
+=== Disk Write Performance: Containers vs. VMs with Shared Storage
 
-  // figure(image("/resources/img/disk/master_node_comparison_avg.png"), caption: "BW TS High"),
-//
+We compared disk write performance between containers and virtual machines (VMs) under two scenarios: local storage and shared storage. In our setup, VMs use NFS for sharing folders on Linux, while containers use a Docker named volume (`hpc-shared`), which is managed by Docker and typically mapped directly.
+
+*Key observations:*
+- _Write performance:_ Containers consistently outperform VMs on shared storage writes. This is because Docker volumes avoid the overhead of network-based protocols like NFS, which require extra synchronization and introduce latency, especially for VMs.
+- _Read performance:_ Read speeds are similar between containers and VMs, regardless of the storage configuration. This is mainly because reads do not require the same level of synchronization or network communication as writes. Data can be fetched directly from the underlying storage, so the network stack (such as Ethernet or NFS) does not become a bottleneck for reads.
+
+#warningbox()[
+_macOS note:_ On macOS, Docker containers themselves run inside a lightweight VM. This means container disk I/O performance is inherently similar to that of VMs, especially for read operations.
+]
+
+Docker containers with named volumes offer vastly superior shared storage performance compared to VMs using NFS. The main bottleneck for VMs is the NFS protocol overhead, while Docker volumes benefit from direct host filesystem access. This makes containers a more efficient choice for I/O-intensive workloads requiring shared storage.
+
+#figure( image("/resources/img/disk/master_Random_Write_kB_s_4way.png", width: 80%),
+  caption: "Random Write Performance Vms vs Containers 3D")
+
+The figure above compares random write throughput for virtual machines (VMs) and containers, both with local and shared storage, across a range of file and record sizes.
+
+We observe that **containers consistently deliver higher and more stable random write performance than VMs**, regardless of whether local or shared storage is used. This stability is particularly noticeable across varying file sizes, where containers exhibit less fluctuation in throughput.
+
+#infobox()[
+  For workloads sensitive to random write performance, containers provide a clear advantage over VMs, both in terms of absolute throughput and consistency across different I/O patterns. 
+]
 
 == Network test results 
 
@@ -121,3 +145,12 @@ This clear division aligns with the fundamental differences between containers a
 
 All node pairs share the virtualization overhead inherent to VM networking.
 Differences among `node_master`, `node_node`, and `master_node` pairs might arise mainly from the master node’s role in hostname/IP management, which can optimize routing and reduce latency/bandwidth penalties for communications involving the master.
+
+#warningbox()[
+  *Warning:* Be very careful when performing tests like this. If you run `iperf` to test the master node from another node, it might resolve to `localhost` instead of the actual remote address. This can result in artificially high performance measurements that are not realistic.
+]
+
+#infobox()[
+  The issue happens because the hostname _(e.g., "master")_ resolves to a loopback IP (127.0.x.x) inside the VM. As a result, iperf3 sends traffic over the VM’s loopback interface instead of the real virtual network interface. This causes the test to measure in-memory data copying rather than actual network throughput, leading to unrealistically high speeds. To fix this, use the VM’s real IP address and ensure the hostname resolves correctly, or explicitly bind iperf3 to the proper interface.
+  So instead of using master (the hostname) use the actaul IP address of the master node to test performances from a worker node.
+]
