@@ -16,26 +16,35 @@ NORD_GRAY = "#4C566A"
 OUT_DIR = "plots/hpcc"
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# Input files per system
+
 HPCC_FILES = {
     "vms": "../results/vms/hpccoutf.txt",
     "containers": "../results/containers/hpccoutf.txt",
 }
 
-# Metrics of interest
 IMPORTANT_METRICS = [
     "HPL_Tflops",
-    "HPL_Best_Gflops",
     "StarDGEMM_Gflops",
     "StarSTREAM_Triad",
+    "SingleSTREAM_Triad",
+    "StarRandomAccess_GUPs",
+    "SingleRandomAccess_GUPs",
+    "StarFFT_Gflops",
+    "SingleFFT_Gflops",
     "AvgPingPongLatency_usec",
-    # ... other metrics
+    "AvgPingPongBandwidth_GBytes",
+    "PTRANS_GBs",
 ]
+
 CONFIG_METRICS = [
     "HPL_N",
     "HPL_NB",
+    "HPL_nprow",
+    "HPL_npcol",
     "CommWorldProcs",
-    # ... other configs
+    "STREAM_VectorSize",
+    "FFT_N",
+    "PTRANS_n",
 ]
 
 
@@ -54,8 +63,10 @@ def parse_hpcc_output(file_path, system_name):
     """
     text = open(file_path).read()
     entries = []
-    secs = re.split(r"Begin of Summary section\.", text)[1:]
-    for sec in secs:
+    parts = re.split(r"Begin of Summary section\.", text)
+    secs = parts[1:]  # secs are the parts after each "Begin of Summary section."
+
+    for i, sec in enumerate(secs):
         part, _ = sec.split("End of Summary section.", 1)
         metrics = {}
         for l in part.splitlines():
@@ -68,17 +79,38 @@ def parse_hpcc_output(file_path, system_name):
                     metrics[k] = v
         metrics["Timestamp"] = extract_timestamp(part.splitlines())
         metrics["System"] = system_name
-        # best HPL
-        best = 0
-        for l in text[: text.find("End of HPL section")].splitlines():
-            if "WR11C2R4" in l:
-                g = re.search(r"(\d+\.\d+)e\+(\d+)", l)
-                if g:
-                    val = float(g.group(1)) * 10 ** int(g.group(2))
-                    best = max(best, val)
-        if best:
-            metrics["HPL_Best_Gflops"] = best
-            metrics["HPL_Best_Tflops"] = best / 1e3
+
+        # Parse preceding text to find the HPL section for this Summary section
+        preceding_text = parts[
+            i
+        ]  # parts[0] is before first Summary, parts[i] corresponds to current sec
+        hpl_start = preceding_text.find("Begin of HPL section.")
+        hpl_end = preceding_text.find("End of HPL section.")
+        if hpl_start != -1 and hpl_end != -1:
+            hpl_section = preceding_text[hpl_start:hpl_end]
+            # Parse each HPL test line
+            for line in hpl_section.splitlines():
+                line = line.strip()
+                # Match lines like WR11C2R4        1024    32     2     3               0.23              3.179e+00
+                match = re.match(
+                    r"^WR\S+\s+(\d+)\s+(\d+)\s+\d+\s+\d+\s+[\d.]+\s+([\d.e+-]+)$", line
+                )
+                if match:
+                    n = int(match.group(1))
+                    nb = int(match.group(2))
+                    gflops = float(match.group(3))
+                    # Create a new entry for this HPL test
+                    hpl_metrics = metrics.copy()
+                    hpl_metrics.update(
+                        {
+                            "HPL_N": n,
+                            "HPL_NB": nb,
+                            "HPL_Gflops": gflops,
+                            "HPL_Tflops": gflops / 1000,
+                        }
+                    )
+                    entries.append(hpl_metrics)
+        # Append the original metrics entry from the Summary section
         entries.append(metrics)
     return entries
 
@@ -136,17 +168,22 @@ def generate_metric_plots(df, metric_groups, out_dir, dpi=200):
 
 def generate_hpl_scaling_plot(df, out_dir, dpi=200):
     """
-    Plot HPL_Best_Tflops vs HPL_N for each System.
+    Plot HPL_Gflops vs HPL_N for each System, using the best Gflops for each N.
     """
-    if "HPL_N" not in df or "HPL_Best_Tflops" not in df:
-        print("⚠️ Missing HPL_N or HPL_Best_Tflops")
+    # Filter and aggregate
+    hpl_df = df.dropna(subset=["HPL_Gflops"])
+    if hpl_df.empty:
+        print("⚠️ No HPL test data")
         return
+
+    # Group by System and HPL_N, take max Gflops
+    hpl_max = hpl_df.groupby(["System", "HPL_N"])["HPL_Gflops"].max().reset_index()
+
     plt.figure(figsize=(8, 5))
-    for sys, grp in df.groupby("System"):
-        # sort by HPL_N
+    for sys, grp in hpl_max.groupby("System"):
         grp_sorted = grp.sort_values("HPL_N")
         plt.plot(
-            grp_sorted["HPL_N"], grp_sorted["HPL_Best_Tflops"], marker="o", label=sys
+            grp_sorted["HPL_N"], grp_sorted["HPL_Gflops"] / 1000, marker="o", label=sys
         )
     plt.xlabel("Problem Size (HPL_N)")
     plt.ylabel("Performance (Tflops)")
