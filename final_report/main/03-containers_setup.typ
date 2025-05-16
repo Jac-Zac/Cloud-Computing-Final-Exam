@@ -136,4 +136,6 @@ depends_on:
 
 This makes nodes services depends on the service named master.
 Thus instructing Docker Compose to start the master service before starting the dependent service.
-Therefore controlling the startup order of containers within the same `compose` file
+Therefore controlling the startup order of containers within the same `compose` file. 
+
+From the Github repo also the #link("https://github.com/Jac-Zac/Cloud-Computing-Final-Exam/blob/main/Containers/compose.yaml")[compose] file and the #link("https://github.com/Jac-Zac/Cloud-Computing-Final-Exam/blob/main/Containers/Dockerfile")[Dockerfile] are also accessible.

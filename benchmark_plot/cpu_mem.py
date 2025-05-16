@@ -217,7 +217,7 @@ def visualize_metrics(df, plot_dir=PLOT_DIR):
 
         plt.tight_layout()
         outpath = os.path.join(dest_dir, f"{metric}_comparison.png")
-        plt.savefig(outpath, dpi=150)
+        plt.savefig(outpath, dpi=300)
         plt.close()
         print(f"Saved {metric} plot: {outpath}")
 
