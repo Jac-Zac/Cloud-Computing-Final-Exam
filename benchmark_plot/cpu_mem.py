@@ -1,126 +1,211 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import os
 import re
-
 import matplotlib.pyplot as plt
 import pandas as pd
 
 BASE = "../results"
 ENVS = ["host", "vms", "containers"]
+PLOT_DIR = "plots"
 
 
 def clean(line):
+    """Remove ANSI escape codes and clean up lines"""
     return re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
 
 
-def extract_metric(lines, pattern):
-    values = [float(m.group(1)) for line in lines if (m := re.search(pattern, line))]
-    return sum(values) / len(values) if values else None
-
-
-def parse_log(path, metric):
+def parse_log(path):
+    """Parse log files and extract multiple metrics"""
     if not os.path.exists(path):
         return None
 
+    metrics = {
+        "events_per_sec": [],
+        "total_time_s": [],
+        "lat_avg_ms": [],
+        "mem_mb_sec": [],
+        "bogo_ops_per_sec": [],
+    }
+
     with open(path, "r") as f:
-        lines = [clean(line) for line in f if line.strip()]
+        for line in f:
+            clean_line = clean(line)
 
-    patterns = {
-        "cpu": r"events per second:\s*([\d.]+)",
-        "mem": r"MiB transferred.*\(([\d.]+)\s+MiB/sec\)",
-    }
+            # Capture benchmark type and environment from header
+            if "Starting benchmark for:" in clean_line:
+                match = re.search(
+                    r"Starting benchmark for: ([\w-]+)\s+\((\w+)\)", clean_line
+                )
+                if match:
+                    metrics["benchmark"] = match.group(1)
+                    metrics["environment"] = match.group(2)
 
-    return extract_metric(lines, patterns.get(metric, ""))
+            # CPU metrics
+            if "events per second:" in clean_line:
+                match = re.search(r"events per second:\s*([\d.]+)", clean_line)
+                if match:
+                    metrics["events_per_sec"].append(float(match.group(1)))
 
+            if "total time:" in clean_line:
+                match = re.search(r"total time:\s*([\d.]+)s", clean_line)
+                if match:
+                    metrics["total_time_s"].append(float(match.group(1)))
 
-def build_paths(base, envs):
+            if "avg:" in clean_line:
+                match = re.search(r"avg:\s*([\d.]+)", clean_line)
+                if match:
+                    metrics["lat_avg_ms"].append(float(match.group(1)))
+
+            # Memory metrics
+            if "MiB/sec" in clean_line:
+                match = re.search(r"(\d+\.\d+)\s+MiB/sec", clean_line)
+                if match:
+                    metrics["mem_mb_sec"].append(float(match.group(1)))
+
+            # Stress-ng metrics (updated pattern)
+            if "stress-ng: metrc:" in clean_line and "vm" in clean_line:
+                match = re.search(
+                    r"vm\s+\d+\s+\d+\.\d+\s+\d+\.\d+\s+\d+\.\d+\s+(\d+\.\d+)",
+                    clean_line,
+                )
+                if match:
+                    metrics["bogo_ops_per_sec"].append(float(match.group(1)))
+
+    # Calculate averages for multi-value metrics
     return {
-        env: {
-            "cpu": os.path.join(base, env, "cpu", "cpu.log"),
-            "mem": os.path.join(base, env, "mem", "mem.log"),
-        }
-        for env in envs
+        "events_per_sec": (
+            sum(metrics["events_per_sec"]) / len(metrics["events_per_sec"])
+            if metrics["events_per_sec"]
+            else None
+        ),
+        "total_time_s": (
+            sum(metrics["total_time_s"]) / len(metrics["total_time_s"])
+            if metrics["total_time_s"]
+            else None
+        ),
+        "lat_avg_ms": (
+            sum(metrics["lat_avg_ms"]) / len(metrics["lat_avg_ms"])
+            if metrics["lat_avg_ms"]
+            else None
+        ),
+        "mem_mb_sec": (
+            sum(metrics["mem_mb_sec"]) / len(metrics["mem_mb_sec"])
+            if metrics["mem_mb_sec"]
+            else None
+        ),
+        "bogo_ops_per_sec": (
+            sum(metrics["bogo_ops_per_sec"]) / len(metrics["bogo_ops_per_sec"])
+            if metrics["bogo_ops_per_sec"]
+            else None
+        ),
+        "environment": metrics.get("environment", "unknown"),
     }
 
 
-def parse_logs(log_files):
-    return {
-        env: {metric: parse_log(path, metric) for metric, path in metrics.items()}
-        for env, metrics in log_files.items()
-    }
-
-
-def visualize_data(data, output_dir="plots"):
-    os.makedirs(output_dir, exist_ok=True)
-    plt.style.use("ggplot")
-
-    specs = {
-        "cpu": ("CPU Throughput (kEPS)", True, lambda x: x / 1000, "kEPS"),
-        "mem": ("Memory Bandwidth (GiB/sec)", False, lambda x: x / 1024, "GiB/s"),
-    }
-
-    for metric, (ylabel, use_log, transform, unit) in specs.items():
-        envs, values = (
-            zip(
-                *[
-                    (env, transform(mets[metric]))
-                    for env, mets in data.items()
-                    if mets.get(metric) is not None
-                ]
-            )
-            if any(mets.get(metric) for mets in data.values())
-            else ([], [])
-        )
-
-        if not values:
-            print(f"[WARN] No data for {metric}, skipping plot.")
+def discover_logs(base_dir):
+    """Find all log files in the results directory structure"""
+    logs = {}
+    for env in ENVS:
+        env_dir = os.path.join(base_dir, env)
+        if not os.path.exists(env_dir):
             continue
 
-        fig, ax = plt.subplots(figsize=(8, 5))
-        bars = ax.bar(envs, values, color=plt.cm.Set2.colors[: len(envs)])
+        # Look for both CPU and memory logs
+        cpu_log = os.path.join(env_dir, "cpu", "cpu.log")
+        mem_log = os.path.join(env_dir, "mem", "mem.log")
 
-        if use_log:
-            ax.set_yscale("log")
-            ax.grid(
-                True, which="both", axis="y", linestyle="--", linewidth=0.7, alpha=0.7
-            )
-        else:
-            ax.grid(axis="y", linestyle="--", linewidth=0.7, alpha=0.7)
+        if os.path.exists(cpu_log):
+            logs[f"{env}_cpu"] = cpu_log
+        if os.path.exists(mem_log):
+            logs[f"{env}_mem"] = mem_log
 
+    return logs
+
+
+def visualize_metrics(df, plot_dir=PLOT_DIR):
+    """Generate comparison plots for all metrics"""
+    # Ensure plot directory exists
+    os.makedirs(plot_dir, exist_ok=True)
+    plt.style.use("ggplot")
+
+    metrics = {
+        "events_per_sec": (
+            "CPU Performance",
+            "Events per second",
+            "linear",
+            "events/s",
+        ),
+        "lat_avg_ms": ("Latency", "Average latency (ms)", "linear", "ms"),
+        "mem_mb_sec": ("Memory Throughput", "MB/s", "log", "MB/s"),
+        "bogo_ops_per_sec": (
+            "Stress-ng Performance",
+            "Bogo Operations/s",
+            "log",
+            "bogo ops/s",
+        ),
+    }
+
+    for metric, (title, ylabel, scale, unit) in metrics.items():
+        plt.figure(figsize=(10, 6))
+
+        # Filter and sort data
+        data = df.dropna(subset=[metric])
+        data = data.sort_values(metric, ascending=False)
+
+        if data.empty:
+            print(f"Skipping {metric} - no data")
+            continue
+
+        bars = plt.bar(data.index, data[metric], color=plt.cm.tab20.colors)
+        plt.title(f"{title} Comparison", pad=20)
+        plt.ylabel(ylabel)
+        plt.yscale(scale)
+        plt.xticks(rotation=45, ha="right")
+
+        # Add value annotations
         for bar in bars:
             height = bar.get_height()
-            ax.annotate(
-                f"{height:.2f} {unit}",
+            plt.annotate(
+                f"{height:.1f} {unit}",
                 xy=(bar.get_x() + bar.get_width() / 2, height),
-                xytext=(0, 5),
+                xytext=(0, 3),  # 3 points vertical offset
                 textcoords="offset points",
                 ha="center",
                 va="bottom",
-                fontsize=9,
             )
 
-        ax.set_title(f"{ylabel} Comparison", fontsize=14, weight="bold")
-        ax.set_ylabel(ylabel + (" (log scale)" if use_log else ""), fontsize=12)
-        ax.set_xlabel("Environment", fontsize=12)
-        plt.xticks(rotation=30, ha="right")
         plt.tight_layout()
-
-        out_path = os.path.join(output_dir, f"{metric}_comparison.png")
-        plt.savefig(out_path)
+        plot_path = os.path.join(plot_dir, f"{metric}_comparison.png")
+        plt.savefig(plot_path, dpi=150)
         plt.close()
-        print(f"[INFO] Saved plot: {out_path}")
+        print(f"Saved plot: {plot_path}")
 
 
 def main():
-    paths = build_paths(BASE, ENVS)
-    parsed = parse_logs(paths)
+    # Create plot directory if not exists
+    os.makedirs(PLOT_DIR, exist_ok=True)
 
-    df = pd.DataFrame(parsed).T
-    print("\n=== Parsed Benchmark Summary ===")
-    print(df)
+    # Discover and parse all log files
+    log_files = discover_logs(BASE)
+    results = []
 
-    visualize_data(parsed)
+    for label, path in log_files.items():
+        data = parse_log(path)
+        if data:
+            data["label"] = label
+            results.append(data)
+
+    # Create DataFrame and save results
+    df = pd.DataFrame(results).set_index("label")
+    csv_path = os.path.join(PLOT_DIR, "benchmark_results.csv")
+    df.to_csv(csv_path)
+
+    print("\nBenchmark Results:")
+    print(df.to_string())  # Using pandas' built-in string formatting
+
+    # Generate visualizations
+    visualize_metrics(df)
 
 
 if __name__ == "__main__":

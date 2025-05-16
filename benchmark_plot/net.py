@@ -13,7 +13,6 @@ BW_THRESHOLD = 70.0
 
 def parse_iperf(lines):
     times, rates = [], []
-    # convert interval start times to float for proper plotting
     pattern = re.compile(r"(\d+\.\d+)-\d+\.\d+\s+sec.*?([\d.]+)\s+Gbits/sec")
     for ln in lines:
         m = pattern.search(ln)
@@ -82,10 +81,9 @@ if __name__ == "__main__":
                 "Avg Latency (ms)": avg_lat,
             }
         )
-        # store sorted series and drop last point to avoid wrap
+
         if times:
             sorted_pairs = sorted(zip(times, rates))
-            # drop last interval if desired to avoid weird edge
             sorted_pairs = sorted_pairs[:-1]
             ts, rs = zip(*sorted_pairs)
             time_series[label] = (list(ts), list(rs))
@@ -97,7 +95,11 @@ if __name__ == "__main__":
     print("\n=== Network Summary ===")
     print(df)
 
-    # split into high- vs low-speed
+    # Save summary to CSV
+    csv_path = os.path.join(out_dir, "network_summary.csv")
+    df.to_csv(csv_path)
+    print(f"\n📄 CSV saved to: {csv_path}")
+
     high = df[df["Avg Bandwidth (Gbits/sec)"] > BW_THRESHOLD].index.tolist()
     low = df[df["Avg Bandwidth (Gbits/sec)"] <= BW_THRESHOLD].index.tolist()
 
@@ -146,7 +148,7 @@ if __name__ == "__main__":
     plot_timeseries(high, "bw_ts_high.png", "Bandwidth Over Time (High-Speed)")
     plot_timeseries(low, "bw_ts_low.png", "Bandwidth Over Time (Low-Speed)")
 
-    # combined latency boxplot
+    # Combined latency boxplot
     fig, ax = plt.subplots(figsize=(8, 5))
     pos = list(range(len(df)))
     data = [latency_series[lbl] for lbl in df.index]
@@ -166,4 +168,4 @@ if __name__ == "__main__":
     plt.savefig(os.path.join(out_dir, "latency_boxplot.png"))
     plt.close()
 
-    print(f"\n✅ Done! Plots saved to '{out_dir}/'.")
+    print(f"\n✅ Done! Plots and CSV saved to '{out_dir}/'.")
