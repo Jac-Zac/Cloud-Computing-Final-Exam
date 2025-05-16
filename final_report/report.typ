@@ -33,14 +33,14 @@
 #include "/main/04-benchmarks.typ"
 #include "/main/05-results.typ"
 #include "/main/06-conclusion.typ"
-#include "/main/to_know.typ"
+// #include "/main/to_know.typ"
 
 #heading(numbering:none, outlined: false)[] <sec:end>
 
 //-------------------------------------
 // Glossary
-//
-#make_glossary(gloss:gloss, title:i18n("gloss-title"))
+// //
+// #make_glossary(gloss:gloss, title:i18n("gloss-title"))
 
 //-------------------------------------
 // Bibliography

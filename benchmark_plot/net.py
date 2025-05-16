@@ -142,7 +142,7 @@ if __name__ == "__main__":
         plt.yticks(color=NORD_FG)
         ax.grid(color=NORD_GREY, linestyle="--", alpha=0.5)
         plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, fname))
+        plt.savefig(os.path.join(out_dir, fname), dpi=300)
         plt.close()
 
     def plot_timeseries(envs, fname, title):
@@ -172,7 +172,7 @@ if __name__ == "__main__":
         plt.xticks(color=NORD_FG)
         plt.yticks(color=NORD_FG)
         plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, fname))
+        plt.savefig(os.path.join(out_dir, fname), dpi=300)
         plt.close()
 
     plot_bar(high, "avg_bw_high.png", "Average Bandwidth (High-Speed Links)")
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     ax.set_xticks(pos)
     ax.set_xticklabels(df.index, rotation=30, ha="right", color=NORD_FG)
     plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, "latency_boxplot.png"))
+    plt.savefig(os.path.join(out_dir, "latency_boxplot.png"), dpi=300)
     plt.close()
 
     print(f"\n✅ Done! Plots and CSV saved to '{out_dir}/'.")

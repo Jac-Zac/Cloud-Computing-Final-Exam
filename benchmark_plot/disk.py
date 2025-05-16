@@ -284,80 +284,89 @@ if __name__ == "__main__":
     plt.close()
     print(f"📊 Saved VM vs Container comparison: {path_ec}")
 
-    # --- Bar: Master vs Node (largest kB only) ---
-    fn = long_df_big[
-        (long_df_big["role"].isin(["master", "node"]))
-        & ~((long_df_big["role"] == "node") & (long_df_big["section"] == "local"))
-    ]
-    grp_mn = (
-        fn.groupby(["environment", "role", "section", "metric"])["value"]
+    # --- Updated Bar: Master vs Node Comparison ---
+    # Aggregate data by environment, role, section
+    summary_mn = (
+        long_df_big.groupby(["environment", "role", "section"])["value"]
         .mean()
         .reset_index()
     )
-    p_mn = grp_mn.pivot_table(
-        index="metric", columns=["environment", "role", "section"], values="value"
-    )
-    ops = p_mn.index.tolist()
-    idx = np.arange(len(ops))
 
-    def sc(col):
-        return p_mn[col].tolist() if col in p_mn else [0] * len(ops)
+    # Filter to relevant configurations: master local, master shared, node shared
+    summary_mn = summary_mn[
+        (
+            (summary_mn["role"] == "master")
+            & (summary_mn["section"].isin(["local", "shared"]))
+        )
+        | ((summary_mn["role"] == "node") & (summary_mn["section"] == "shared"))
+    ]
 
-    d_ml = sc(("container", "master", "local"))
-    d_ms = sc(("container", "master", "shared"))
-    d_ns = sc(("container", "node", "shared"))
-    v_ml = sc(("vm", "master", "local"))
-    v_ms = sc(("vm", "master", "shared"))
-    v_ns = sc(("vm", "node", "shared"))
+    # Create a configuration column
+    summary_mn["configuration"] = summary_mn.apply(
+        lambda x: (
+            f"{x['role']}_{x['section']}" if x["role"] == "master" else "node_shared"
+        ),
+        axis=1,
+    )
 
-    plt.figure(figsize=(18, 8))
+    # Pivot to have environment as columns and handle missing data
+    pivot_mn = (
+        summary_mn.pivot_table(
+            index="configuration", columns="environment", values="value", aggfunc="mean"
+        )
+        .reset_index()
+        .fillna(0)
+    )
+
+    # Define configuration order and sort
+    config_order = ["master_local", "master_shared", "node_shared"]
+    pivot_mn["configuration"] = pd.Categorical(
+        pivot_mn["configuration"], categories=config_order, ordered=True
+    )
+    pivot_mn = pivot_mn.sort_values("configuration")
+
+    # Create plot
+    plt.figure(figsize=(10, 6))
+    bar_width = 0.35
+    x = np.arange(len(pivot_mn))
+
+    # Get values for containers and VMs
+    container_vals = pivot_mn["container"].values
+    vm_vals = pivot_mn["vm"].values
+
+    # Plot bars
     plt.bar(
-        idx - 1.5 * w,
-        d_ml,
-        width=w,
-        label="Docker: Master Local",
+        x - bar_width / 2,
+        container_vals,
+        width=bar_width,
+        label="Containers",
         color=NORD_CONTAINER,
-        alpha=1.0,
+        edgecolor="black",
     )
     plt.bar(
-        idx - 0.5 * w,
-        d_ms,
-        width=w,
-        label="Docker: Master Shared",
-        color=NORD_CONTAINER,
-        alpha=0.75,
-    )
-    plt.bar(
-        idx + 0.5 * w,
-        d_ns,
-        width=w,
-        label="Docker: Node Shared",
-        color=NORD_CONTAINER,
-        alpha=0.5,
-    )
-    plt.bar(
-        idx + 1.5 * w, v_ml, width=w, label="VM: Master Local", color=NORD_VM, alpha=1.0
-    )
-    plt.bar(
-        idx + 2.5 * w,
-        v_ms,
-        width=w,
-        label="VM: Master Shared",
+        x + bar_width / 2,
+        vm_vals,
+        width=bar_width,
+        label="VMs",
         color=NORD_VM,
-        alpha=0.75,
+        edgecolor="black",
     )
-    plt.bar(
-        idx + 3.5 * w, v_ns, width=w, label="VM: Node Shared", color=NORD_VM, alpha=0.5
+
+    # Customize plot
+    plt.xticks(
+        x, ["Master Local", "Master Shared", "Node Shared"], rotation=45, ha="right"
     )
-    plt.xticks(idx, ops, rotation=45, ha="right")
-    plt.ylabel("Throughput (kB/s)")
-    plt.title(f"Master vs Node – Docker & VM (kB={max_kb})")
+    plt.ylabel("Average Throughput (kB/s)")
+    plt.title(
+        f"Disk Performance Comparison (File Size={max_kb} kB)\nAverage Across All Metrics"
+    )
     plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
     plt.grid(axis="y", linestyle="--", alpha=0.5)
     plt.tight_layout()
-    path_mn = os.path.join(out_dir, "iozone_master_vs_node_biggest.png")
+
+    path_mn = os.path.join(out_dir, "master_node_comparison_avg.png")
     plt.savefig(path_mn, dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"📊 Saved Master vs Node comparison: {path_mn}")
+    print(f"📊 Saved configuration comparison: {path_mn}")
 
     print("✅ All plots saved in", out_dir)
