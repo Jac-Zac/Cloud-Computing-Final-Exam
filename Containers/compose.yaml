@@ -2,11 +2,16 @@ services:
   master:
     build: .
     # Set cpu limit
-    cpus: 2
-    # Set memory limit
-    mem_limit: 2048MB
-    # From what I have seen the performance cors are the first
-    # Thus the first 8 cores in my computer are performance core
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2048M
+        reservations:
+          cpus: "2"
+          memory: 2048M
+        # From what I have seen the performance cors are the first
+        # Thus the first 8 cores in my computer are performance core
     cpuset: "0,1" # Set to only cpu 0 and 1
     container_name: master
     environment:
@@ -28,9 +33,15 @@ services:
   node-01:
     # use same Dockerfile for worker
     build: .
-    cpus: 2
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2048M
+        reservations:
+          cpus: "2"
+          memory: 2048M
     cpuset: "2,3"
-    mem_limit: 2048MB
     container_name: node-01
     environment:
       - NODE_ROLE=worker
@@ -45,9 +56,15 @@ services:
 
   node-02:
     build: .
-    cpus: 2
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2048M
+        reservations:
+          cpus: "2"
+          memory: 2048M
     cpuset: "4,5"
-    mem_limit: 2048MB
     container_name: node-02
     environment:
       - NODE_ROLE=worker

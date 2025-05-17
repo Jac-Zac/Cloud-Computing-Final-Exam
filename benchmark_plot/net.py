@@ -51,6 +51,29 @@ def discover_logs(root):
     return logs
 
 
+# Save time series data for high and low speed environments
+def save_timeseries_csv(envs, filename):
+    rows = []
+    for env in envs:
+        times, rates = time_series[env]
+        for t, r in zip(times, rates):
+            rows.append({"Environment": env, "Time (s)": t, "Bandwidth (Gbits/sec)": r})
+    ts_df = pd.DataFrame(rows)
+
+    # Pivot the dataframe:
+    ts_df = ts_df.pivot_table(
+        index="Time (s)",
+        columns="Environment",
+        values="Bandwidth (Gbits/sec)",
+        aggfunc="mean",
+    )
+
+    # Reset index if you want 'Time (s)' as a column
+    ts_df = ts_df.reset_index()
+    ts_df.to_csv(os.path.join(out_dir, filename), index=False)
+    print(f"📄 Time series CSV saved to: {os.path.join(out_dir, filename)}")
+
+
 if __name__ == "__main__":
     results_root = "../results"
     out_dir = "plots/network"
@@ -107,6 +130,9 @@ if __name__ == "__main__":
 
     high = df[df["Avg Bandwidth (Gbits/sec)"] > BW_THRESHOLD].index.tolist()
     low = df[df["Avg Bandwidth (Gbits/sec)"] <= BW_THRESHOLD].index.tolist()
+
+    save_timeseries_csv(high, "bw_ts_high.csv")
+    save_timeseries_csv(low, "bw_ts_low.csv")
 
     def plot_bar(envs, fname, title):
         if not envs:

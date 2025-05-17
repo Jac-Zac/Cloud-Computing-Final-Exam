@@ -1,8 +1,8 @@
 ### Setting up error
 
-I had an issuee with dnsmasq last line then it was fixed
+I had an issue with dnsmasq last line then it was fixed
 
-### I had an issue with containers not having resource restricitons
+### I had an issue with containers not having resource restrictions
 
 ...
 

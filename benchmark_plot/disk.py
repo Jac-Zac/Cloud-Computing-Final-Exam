@@ -252,6 +252,23 @@ if __name__ == "__main__":
     ct_l = get_vals(pivot_ec, "container", "local")
     ct_s = get_vals(pivot_ec, "container", "shared")
 
+    # Create a DataFrame with the data used for plotting
+    df_barplot = pd.DataFrame(
+        {
+            "Operation": ops,
+            "VM_Local": vm_l,
+            "VM_Shared": vm_s,
+            "Container_Local": ct_l,
+            "Container_Shared": ct_s,
+        }
+    )
+
+    # Define the CSV output path (similar to your plot path)
+    csv_path = os.path.join(out_dir, "iozone_vm_vs_container_biggest.csv")
+
+    # Save the DataFrame to CSV
+    df_barplot.to_csv(csv_path, index=False)
+
     plt.figure(figsize=(16, 8))
     plt.bar(idx - 1.5 * w, vm_l, width=w, label="VM - Local", color=NORD_VM, alpha=0.9)
     plt.bar(idx - 0.5 * w, vm_s, width=w, label="VM - Shared", color=NORD_VM, alpha=0.6)

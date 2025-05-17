@@ -1,4 +1,4 @@
 label,events_per_sec,total_time_s,lat_avg_ms,mem_mb_sec,bogo_ops_per_sec,environment
 host_mem,,0.0084,0.03,58356.68,358766.79,standalone
 vms_mem,,0.012775,0.0475,36494.305,138139.665,distributed
-containers_mem,,0.012133333333333335,0.03666666666666667,40020.865,62285.96333333334,distributed
+containers_mem,,0.010766666666666667,0.034999999999999996,44349.454999999994,61929.82,distributed

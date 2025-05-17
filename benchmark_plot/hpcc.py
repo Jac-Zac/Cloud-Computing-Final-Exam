@@ -169,7 +169,8 @@ def generate_metric_plots(df, metric_groups, out_dir, dpi=200):
 
 def generate_hpl_scaling_plot(df, out_dir, dpi=200):
     """
-    Plot HPL_Gflops vs HPL_N for each System using Nord colors.
+    Plot HPL_Gflops vs HPL_N for each System using Nord colors,
+    and save the processed CSV data used for plotting.
     """
     hpl_df = df.dropna(subset=["HPL_Gflops"])
     if hpl_df.empty:
@@ -178,10 +179,14 @@ def generate_hpl_scaling_plot(df, out_dir, dpi=200):
 
     hpl_max = hpl_df.groupby(["System", "HPL_N"])["HPL_Gflops"].max().reset_index()
 
+    # Save the processed data to CSV
+    csv_path = os.path.join(out_dir, "hpl_scaling_data.csv")
+    hpl_max.to_csv(csv_path, index=False)
+    print(f"💾 Saved CSV data for plot: {csv_path}")
+
     plt.figure(figsize=(8, 5))
     for sys, grp in hpl_max.groupby("System"):
         grp_sorted = grp.sort_values("HPL_N")
-        # Assign colors directly based on system name
         color = NORD_RED if sys == "vms" else NORD_GREEN
         plt.plot(
             grp_sorted["HPL_N"],
