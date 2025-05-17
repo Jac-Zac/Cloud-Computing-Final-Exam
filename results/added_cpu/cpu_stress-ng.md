@@ -69,3 +69,23 @@ stress-ng: info:  [33480] passed: 2: cpu (2)
 stress-ng: info:  [33480] failed: 0
 stress-ng: info:  [33480] metrics untrustworthy: 0
 ```
+
+## Addiotnal tests
+
+I tried to disassemble the binaries:
+
+```bash
+objdump -d /usr/bin/stress-ng > stress-ng.asm
+```
+
+But still found mentions of instructions such as `fadd`
+
+**Probably the benchmark was also boosting the cpu to higher level to what the Virtual machiens allow and thus being such a short and easy benchmark I got unreliable results**
+
+This can happen because the physical machine can boost its CPU performance dynamically, while the virtual machine may not have access to the same CPU boosting features or hardware acceleration.
+
+In contrast, virtualization on Apple silicon generally provides near-native CPU core performance for many workloads, but some hardware features or co-processors (like the AMX matrix co-processor) used by certain optimized libraries are not available inside VMs. This can cause some specialized tasks to run significantly slower in virtualized environments. Moreover, the VM environment may impose limits on CPU frequency scaling or power management, preventing the CPU from boosting as aggressively as on the host machine.
+
+### Interesting case study:
+
+(Surmising CPU results)[https://eclecticlight.co/2024/01/22/why-does-virtualisation-run-some-code-far-slower-on-apple-silicon/]
